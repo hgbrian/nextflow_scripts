@@ -104,7 +104,7 @@ describe_vpc() {
     echo "================================"
 
     vpcinfo=$(aws ec2 describe-vpcs --output text --profile $username)
-    vpc_id=$(echo "$vpcinfo" |cut -f7)
+    vpc_id=$(echo "$vpcinfo" | cut -f7)
     echo "vpc:          $vpcinfo"
     echo "vpc_id:       $vpc_id"
     
@@ -112,30 +112,30 @@ describe_vpc() {
     
     if [ "$vpc_id" != "" ]; then
         subnetinfo=$(aws ec2 describe-subnets --output text --profile $username)
-        subnet_id=$(echo "$subnetinfo" | grep $vpc_id |cut -f9)
+        subnet_id=$(echo "$subnetinfo" | grep $vpc_id | cut -f9)
         echo "subnet:       $subnetinfo"
         echo "subnet_id:    $subnet_id"
     
         echo "---------"
-        sginfo=$(aws ec2 describe-security-groups --output text --profile $username |grep $vpc_id)
-        sg_id=$(echo "$sginfo" |cut -f3)
+        sginfo=$(aws ec2 describe-security-groups --output text --profile $username | grep $vpc_id)
+        sg_id=$(echo "$sginfo" | cut -f3)
         echo "sg_id:        $sg_id"
 
-        eni_id=$(aws ec2 describe-network-interfaces --output text --profile $username |grep $vpc_id |cut -f5)
+        eni_id=$(aws ec2 describe-network-interfaces --output text --profile $username | grep $vpc_id | cut -f5)
         echo "eni_id:       $eni_id"
 
-        rtb_id=$(aws ec2 describe-route-tables --output text --profile $username |grep $vpc_id |cut -f2)
+        rtb_id=$(aws ec2 describe-route-tables --output text --profile $username | grep $vpc_id | cut -f2)
         echo "rtb_id:       $rtb_id"
     
-        igw_id=$(aws ec2 describe-internet-gateways --profile $username |grep -B1 $vpc_id |head -1 |cut -f2)
+        igw_id=$(aws ec2 describe-internet-gateways --profile $username |grep -B1 $vpc_id |head -1 | cut -f2)
         echo "igw_id:       $igw_id"
 
 
-        efs_id=$(aws efs describe-file-systems --profile $username | grep "^FILESYSTEMS" | head -1)
+        efs_id=$(aws efs describe-file-systems --profile $username | grep "^FILESYSTEMS" | head -1 | cut -f4)
         echo "efs_id:       $efs_id"
 
-        ecr_id=$(aws ecr describe-repositories --profile $username | grep "^REPOSITORIES" | head -1)
-        echo "ecr_id:       $ecr_id"
+        ecr_url=$(aws ecr describe-repositories --profile $username | grep "^REPOSITORIES" | head -1 | cut -f6)
+        echo "ecr_url:      $ecr_url"
         
     else
         echo "No vpc exists; exiting"
