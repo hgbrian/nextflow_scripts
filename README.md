@@ -1,3 +1,52 @@
+nextflow cloud
+==============
+This repo is an example of:
+
+- creating a simple nextflow pipeline
+- running it in docker
+- deploying it to aws cloud using `nextflow cloud`
+
+Steps
+=====
+
+- Create a nextflow.config file
+- Create a workflow
+- Test locally with docker
+
+Run locally (`-profile standard` is optional, docker image is in `nextflow.config`):
+
+    nextflow run blast2.nf -profile standard -with-docker
+
+Run on the cloud:
+
+    nextflow run blast2.nf -profile cloud -with-docker
+
+
+Set up EFS on AWS
+-----------------
+
+Create a filesystem associated with this $username (one filesystem per user)
+    ./nfvpc.sh setup_efs
+
+Log into ECR (create a repository for $username if it doesn't exist)
+    ./nfvpc.sh setup_ecr
+    #319133706199.dkr.ecr.eu-west-1.amazonaws.com/nextflowuser_repo
+
+
+Docker
+------
+This `blast` pipeline will be run inside docker:
+
+    docker build . -t nextflowuser/blast
+
+The docker image must be tagged with the ECR repo:
+
+    docker tag nextflowuser/blast:latest $ecr_repo
+    docker push $ecr_repo
+
+
+
+
 nfvpc.sh
 ========
 A script that creates and/or destroys a single-use VPC on AWS for use by `nextflow cloud`. 
@@ -27,6 +76,19 @@ To run
     # ssh in and run `nextflow run hello`
     ./nfvpc.sh shutdown_nextflow_cluster
     ./nfvpc.sh shutdown_vpc
+
+
+To run with EFS
+---------------
+    ./nfvpc.sh setup_vpc
+    ./nfvpc.sh setup_efs
+    ./nfvpc.sh setup_ecr
+    ./nfvpc.sh describe_vpc
+    ./nfvpc.sh create_nextflow_cluster
+    # ssh in and run `nextflow run hello`
+    ./nfvpc.sh shutdown_nextflow_cluster
+    ./nfvpc.sh shutdown_vpc
+
 
 Minimal nextflow.config
 -----------------------

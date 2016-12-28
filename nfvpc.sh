@@ -8,6 +8,9 @@ username=nextflowuser
 # setup
 #
 initial_setup() {
+    # use this id where the raw username is not appropriate?
+    username_sha=$(echo $username | shasum | cut -c1-16)
+
     userinfo=$(aws iam get-user --user-name $username --profile $username)
     userexists=$(echo "$userinfo" |cut -f6)
 
@@ -126,6 +129,14 @@ describe_vpc() {
     
         igw_id=$(aws ec2 describe-internet-gateways --profile $username |grep -B1 $vpc_id |head -1 |cut -f2)
         echo "igw_id:       $igw_id"
+
+
+        efs_id=$(aws efs describe-file-systems --profile $username | grep "^FILESYSTEMS" | head -1)
+        echo "efs_id:       $efs_id"
+
+        ecr_id=$(aws ecr describe-repositories --profile $username | grep "^REPOSITORIES" | head -1)
+        echo "ecr_id:       $ecr_id"
+        
     else
         echo "No vpc exists; exiting"
         exit
@@ -150,6 +161,55 @@ shutdown_vpc() {
     aws ec2 delete-subnet --subnet-id $subnet_id --profile $username
     aws ec2 delete-vpc --vpc-id $vpc_id --profile $username
 }
+
+
+setup_efs() {
+    echo "================================"
+    echo "| setup efs                    |"
+    echo "================================"
+
+    efsinfo=$(aws efs describe-file-systems --profile $username | grep "^FILESYSTEMS")
+
+    if [ "$efsinfo" == '' ]; then
+        echo "Creating EFS using id $username_sha"
+        efsinfo = $(aws efs create-file-system --creation-token $username_sha --profile $username)
+        efs_id=$(echo "$efsinfo" | cut -f3)
+    else
+        efs_id=$(echo "$efsinfo" | cut -f4)
+    fi
+    echo "efs_id:       $efs_id"
+
+    # I may not need to do this (cut -f4 to get fsmt-id)
+    #aws efs create-mount-target --file-system-id fs-6af50da3 --subnet-id subnet-9a4462ec --profile nextflowuser
+}
+
+setup_ecr() {
+    echo "================================"
+    echo "| setup ecr                    |"
+    echo "================================"
+    
+    reponame="${username}_repo"
+
+    ecrinfo=$(aws ecr describe-repositories --profile $username | grep "^REPOSITORIES")
+    #REPOSITORIES    1482947163.0    319133706199    arn:aws:ecr:eu-west-1:319133706199:repository/nextflowuser_repo nextflowuser_repo       319133706199.dkr.ecr.eu-west-1.amazonaws.com/nextflowuser_repo
+    if [ "$ecrinfo" == '' ]; then
+        echo "No ECR ($reponame) found, creating one"
+        ecrinfo=$(aws ecr create-repository --repository-name $reponame --profile $username)
+        ecr_url=$(echo "$ecrinfo" | cut -f6)
+    else
+        if [ $(echo "$ecrinfo" | cut -f5) != "$reponame" ]; then
+            echo "Error in repo name? $(echo $ecrinfo | cut -f5) should be $reponame"
+        fi
+        ecr_url=$(echo "$ecrinfo" | cut -f6)
+    fi
+    echo "ecr_url:     $ecr_url"
+    
+    # This command provides a password for docker authentication
+    docker_login_cmd=$(aws ecr get-login --profile $username)
+    echo "Logging in to ECR using command: $(echo $docker_login_cmd | perl -pe 's/-p (.+?) (.+)/-p pwd $2/g')"
+    $docker_login_cmd
+}
+
 
 # ----------------------------------------------------------------------------------------
 # nextflow
@@ -189,6 +249,10 @@ fi
 arg=$1
 if [ $arg == "setup_vpc" ]; then
     setup_vpc
+elif [ $arg == "setup_efs" ]; then
+    setup_efs
+elif [ $arg == "setup_ecr" ]; then
+    setup_ecr
 elif [ $arg == "shutdown_vpc" ]; then
     shutdown_nextflow_cluster
     describe_vpc
