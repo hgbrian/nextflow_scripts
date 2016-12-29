@@ -9,3 +9,4 @@ RUN apt-get update && apt-get install -y \
   nano \
   ncbi-blast+
 
+RUN pip install awscli
