@@ -47,6 +47,13 @@ Then run:
     nextflow run blast.nf -with-docker
 
 
+CLOUD
+export NXF_AWS_subnet_id="subnet-cc"
+export NXF_AWS_efs_id="fs-dd"
+export NXF_AWS_accessKey="aa"
+export NXF_AWS_secretKey="bb/AU3"
+export NXF_AWS_container_id="3211232.dkr.ecr.eu-west-1.amazonaws.com/nextflowuser_repo"
+aws ecr get-login
 
 Set up EFS on AWS
 -----------------

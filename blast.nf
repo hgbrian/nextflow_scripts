@@ -33,6 +33,7 @@ params.out = "results.local.txt"
 params.s3_bucket = "s3://${NXF_username}-irish-bucket"
 params.chunkSize = 100 
 
+/*
 if (params.profile == "aws") {
     s3_db_path = params.s3_bucket + "/" + file(params.db).parent
     params.db = "${NXF_AWS_efs_mnt}/${params.db}"
@@ -45,7 +46,7 @@ else if (params.profile == "standard") {
 else {
     error "Invalid params.profile ${params}"
 }
-
+*/
 
 db_name = file(params.db).name
 db_path = file(params.db).parent
@@ -61,7 +62,7 @@ Channel
     .splitFasta(by: params.chunkSize)
     .set { fasta }
 
-
+/*
 process if_aws_download_database_from_s3_to_efs {
     when:
     params.profile == "aws"
@@ -72,13 +73,13 @@ process if_aws_download_database_from_s3_to_efs {
     
     if [ ! -s "${db_path}" ]; then
         echo "file does not exist ${db_path}" >out3.out
-        aws s3 cp -r "${s3_db_path}" "${db_path}"
+        aws s3 cp --recursive "${s3_db_path}" "${db_path}"
     else
         echo "file exists ${db_path}" >out3.out
     fi
     """    
 }
-
+*/
 
 
 /* 
