@@ -23,18 +23,33 @@ vim: syntax=groovy
  *   along with Nextflow.  If not, see <http://www.gnu.org/licenses/>.
  */
  
-
 /*
  * Defines the pipeline inputs parameters (giving a default value for each for them) 
  * Each of the following parameters can be specified as command line options
  */
 params.query = "$baseDir/examples/data/sample.fa"
-params.db = "$baseDir/examples/blast-db/pdb/tiny"
-//params.out = "result.txt"
+params.db = "$baseDir/examples2/blast-db/pdb/tiny"
+params.out = "results.local.txt"
+params.s3_bucket = "s3://${NXF_username}-irish-bucket"
 params.chunkSize = 100 
+
+if (params.profile == "aws") {
+    s3_db_path = params.s3_bucket + "/" + file(params.db).parent
+    params.db = "${NXF_AWS_efs_mnt}/${params.db}"
+    params.out = "${params.s3_bucket}/results.cloud.txt"
+    error "no aws yet"
+}
+else if (params.profile == "standard") {
+    s3_db_path = ''
+}
+else {
+    error "Invalid params.profile ${params}"
+}
+
 
 db_name = file(params.db).name
 db_path = file(params.db).parent
+
 
 /* 
  * Given the query parameter creates a channel emitting the query fasta file(s), 
@@ -45,6 +60,26 @@ Channel
     .fromPath(params.query)
     .splitFasta(by: params.chunkSize)
     .set { fasta }
+
+
+process if_aws_download_database_from_s3_to_efs {
+    when:
+    params.profile == "aws"
+
+    script:
+    """
+    #!/usr/bin/env bash
+    
+    if [ ! -s "${db_path}" ]; then
+        echo "file does not exist ${db_path}" >out3.out
+        aws s3 cp -r "${s3_db_path}" "${db_path}"
+    else
+        echo "file exists ${db_path}" >out3.out
+    fi
+    """    
+}
+
+
 
 /* 
  * Executes a BLAST job for each chunk emitted by the 'fasta' channel 
@@ -89,4 +124,4 @@ process extract {
  */ 
 sequences
     .collectFile(name: params.out)
-    .println { file -> "matching sequences:\n ${file.text}" }
+    .println { file -> "matching sequences (${params.out}):\n ${file.text}" }
