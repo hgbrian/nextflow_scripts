@@ -2,7 +2,8 @@
 # ----------------------------------------------------------------------------------------
 # Globals (should match nextflow.config)
 #
-username=nextflowuser
+username="nextflowuser"
+github_url="hgbrian/nextflow_scripts"
 
 # ----------------------------------------------------------------------------------------
 # setup
@@ -32,7 +33,7 @@ initial_setup() {
     clusterinfo=$(nextflow cloud list)
     
     echo "================================"
-    echo "| setup                        |"
+    echo "| config                       |"
     echo "================================"
     echo "username:     $username"
     echo "external_ip:  $external_ip"
@@ -234,6 +235,29 @@ shutdown_nextflow_cluster() {
 }
 
 
+run_on_cloud() {
+    echo "================================"
+    echo "| run on cloud                 |"
+    echo "================================"
+
+    aws_cloud_ip=$(aws ec2 describe-instances --profile nextflowuser |grep "^INSTANCES" |cut -f13)
+    
+    ssh -i /Users/briann/.ssh/ssh-key-$username $username@$aws_cloud_ip <<ENDSSH
+    export NXF_username="${NXF_username}"
+    export NXF_AWS_subnet_id="${NXF_AWS_subnet_id}"
+    export NXF_AWS_efs_id="${NXF_AWS_efs_id}"
+    export NXF_AWS_accessKey="${NXF_AWS_accessKey}"
+    export NXF_AWS_secretKey="${NXF_AWS_secretKey}"
+    export NXF_AWS_container_id="${NXF_AWS_container_id}"
+    export NXF_AWS_efs_mnt="${NXF_AWS_efs_mnt}"
+
+    cd "${NXF_ASSETS}/${github_url}"
+    git pull
+    cd -
+    aws s3 cp --recursive "s3://${NXF_username}-irish-bucket/tmp/pdb" "${NXF_AWS_efs_mnt}/pdb"
+    ./nextflow run ${github_url} -with-docker -profile aws --db "${NXF_AWS_efs_mnt}/pdb/tiny" --out "s3://${NXF_username}-irish-bucket/auto.out"
+    ENDSSH
+}
 
 # ----------------------------------------------------------------------------------------
 # Run
