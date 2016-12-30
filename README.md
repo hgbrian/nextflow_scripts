@@ -8,8 +8,9 @@ This repo shows how to:
 
 0. Set up a username and github url
 -----------------------------------
-export NXF_username="hgbrian"
-export NXF_github_url="hgbrian/nextflow_scripts"
+
+    export NXF_username="hgbrian"
+    export NXF_github_url="hgbrian/nextflow_scripts"
 
 
 1. Running the pipeline locally

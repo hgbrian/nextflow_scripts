@@ -62,24 +62,6 @@ Channel
     .splitFasta(by: params.chunkSize)
     .set { fasta }
 
-/*
-process if_aws_download_database_from_s3_to_efs {
-    when:
-    params.profile == "aws"
-
-    script:
-    """
-    #!/usr/bin/env bash
-    
-    if [ ! -s "${db_path}" ]; then
-        echo "file does not exist ${db_path}" >out3.out
-        aws s3 cp --recursive "${s3_db_path}" "${db_path}"
-    else
-        echo "file exists ${db_path}" >out3.out
-    fi
-    """    
-}
-*/
 
 
 /* 
