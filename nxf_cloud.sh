@@ -1,9 +1,13 @@
 #!/bin/bash
 
 # ----------------------------------------------------------------------------------------
+# This is a script that helps create a cluster on AWS and deploy nextflow pipelines to 
+# that cluster.
+#
+#
 # To use:
 #
-# 0. Set global env vars NXF_username NXF_github_url
+# 0. Set global env vars: NXF_username NXF_github_url
 # 1. Create an AWS VPC:  ./nxf_cloud.sh create_vpc
 # 2. Create an EFS:      ./nxf_cloud.sh create_efs
 #
@@ -14,12 +18,12 @@
 #
 username="${NXF_username}"
 github_url="${NXF_github_url}"
-s3_static_dir="/pdb"
+static_path="${NXF_static_path}"
 
 
 if [ "${username}" == "" ]; then echo "no NXF_username env var set; exiting"; exit; fi
 if [ "${github_url}" == "" ]; then echo "no NXF_github_url env var set; exiting"; exit; fi
-if [ "${s3_static_dir}" == "" ]; then echo "no s3_static_dir env var set; exiting"; exit; fi
+if [ "${static_path}" == "" ]; then echo "no static_path env var set; exiting"; exit; fi
 
 
 # ----------------------------------------------------------------------------------------
@@ -363,8 +367,8 @@ if [ -d "\${NXF_ASSETS}/${NXF_github_url}" ]; then
     cd -
 fi
 
-if [ ! -d "${NXF_AWS_efs_mnt}${s3_static_dir}" ]; then
-    aws s3 cp --recursive "${s3_bucket}${s3_static_dir}" "${NXF_AWS_efs_mnt}${s3_static_dir}"
+if [ ! -d "${NXF_AWS_efs_mnt}${static_path}" ]; then
+    aws s3 cp --recursive "${s3_bucket}${static_path}" "${NXF_AWS_efs_mnt}${static_path}"
 fi
 
 echo "=========================="
