@@ -30,23 +30,7 @@ vim: syntax=groovy
 params.query = "$baseDir/examples/data/sample.fa"
 params.db = "$baseDir/examples2/blast-db/pdb/tiny"
 params.out = "results.local.txt"
-params.s3_bucket = "s3://${NXF_username}-irish-bucket"
 params.chunkSize = 100 
-
-/*
-if (params.profile == "aws") {
-    s3_db_path = params.s3_bucket + "/" + file(params.db).parent
-    params.db = "${NXF_AWS_efs_mnt}/${params.db}"
-    params.out = "${params.s3_bucket}/results.cloud.txt"
-    error "no aws yet"
-}
-else if (params.profile == "standard") {
-    s3_db_path = ''
-}
-else {
-    error "Invalid params.profile ${params}"
-}
-*/
 
 db_name = file(params.db).name
 db_path = file(params.db).parent
