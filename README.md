@@ -57,18 +57,12 @@ There are two scripts being used:
 - **nxf_cloud.sh** : a bash script to help manage the VPC, cloud, etc.
 - **nextflow.config** : the config file includes information on the cloud setup
 
-Because these two files need to share information (and so does the cloud), I'll set 
-some environment variables:
+Because these two files need to share information, 
+I'll set three environment variables:
 - **NXF_username** : a username for this project (e.g., NXF_hgbrian)
 - **NXF_github_repo** : the location of the code (e.g., hgbrian/nextflow_scripts)
-- **NXF_static_path** : the location of the data
+- **NXF_static_path** : the location of the data (e.g., /pdb)
 
-
-3a. Set up a username and github url
------------------------------------
-
-    export NXF_username="hgbrian"
-    export NXF_github_url="hgbrian/nextflow_scripts"
 
 
 3b. Set up EFS on AWS

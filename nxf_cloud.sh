@@ -7,7 +7,7 @@
 #
 # To use:
 #
-# 0. Set global env vars: NXF_username NXF_github_url
+# 0. Set global env vars: NXF_username NXF_github_repo
 # 1. Create an AWS VPC:  ./nxf_cloud.sh create_vpc
 # 2. Create an EFS:      ./nxf_cloud.sh create_efs
 #
@@ -17,12 +17,12 @@
 # All these environment variables will need to be set to run `nextflow cloud`
 #
 username="${NXF_username}"
-github_url="${NXF_github_url}"
+github_repo="${NXF_github_repo}"
 static_path="${NXF_static_path}"
 
 
 if [ "${username}" == "" ]; then echo "no NXF_username env var set; exiting"; exit; fi
-if [ "${github_url}" == "" ]; then echo "no NXF_github_url env var set; exiting"; exit; fi
+if [ "${github_repo}" == "" ]; then echo "no NXF_github_repo env var set; exiting"; exit; fi
 if [ "${static_path}" == "" ]; then echo "no static_path env var set; exiting"; exit; fi
 
 
@@ -35,7 +35,7 @@ s3_bucket="s3://${NXF_username}-irish-bucket"
 # FIXFIX check if s3_bucket exists
 
 required_env_vars="NXF_username
-NXF_github_url
+NXF_github_repo
 NXF_AWS_subnet_id
 NXF_AWS_efs_id
 NXF_AWS_efs_mnt
@@ -108,7 +108,7 @@ initial_setup() {
     echo "| current config               |"
     echo "================================"
     echo "username:       ${username}"
-    echo "github_url:     ${github_url}"
+    echo "github_repo:     ${github_repo}"
     echo "external_ip:    ${external_ip}"
     echo "vpc:            ${vpc_id}"
     echo "cluster:       " ${clusterinfo} # remove newlines in output by removing quotes
@@ -331,7 +331,7 @@ run_on_cloud() {
     echo "================================"
     echo "| run on cloud                 |"
     echo "================================"
-    echo "github_url:          ${NXF_github_url}"
+    echo "github_repo:          ${NXF_github_repo}"
     
     if [ "${is_env_not}" != "" ]; then echo "missing environment vars: ${is_env_not}; exiting" exit; fi
 
@@ -343,7 +343,7 @@ echo "| Preparing for nextflow |"
 echo "=========================="
 
 export NXF_username="${NXF_username}"
-export NXF_github_url="${NXF_github_url}"
+export NXF_github_repo="${NXF_github_repo}"
 export NXF_AWS_subnet_id="${NXF_AWS_subnet_id}"
 export NXF_AWS_efs_id="${NXF_AWS_efs_id}"
 export NXF_AWS_accessKey="${NXF_AWS_accessKey}"
@@ -361,8 +361,8 @@ $(aws ecr get-login)
 echo "=========================="
 echo "| Syncing files          |"
 echo "=========================="
-if [ -d "\${NXF_ASSETS}/${NXF_github_url}" ]; then
-    cd "\${NXF_ASSETS}/${NXF_github_url}"
+if [ -d "\${NXF_ASSETS}/${NXF_github_repo}" ]; then
+    cd "\${NXF_ASSETS}/${NXF_github_repo}"
     git pull
     cd -
 fi
@@ -374,7 +374,7 @@ fi
 echo "=========================="
 echo "| Running nextflow       |"
 echo "=========================="
-./nextflow run ${github_url} -with-docker -profile aws \
+./nextflow run ${github_repo} -with-docker -profile aws \
 -with-dag "${s3_bucket}/dag.png" \
 --db "${NXF_AWS_efs_mnt}/pdb/tiny" \
 --out "${s3_bucket}/blast.out"
