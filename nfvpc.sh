@@ -5,6 +5,22 @@
 username="${NXF_username}"
 github_url="${NXF_github_url}"
 
+required_env_vars="NXF_test
+NXF_username
+NXF_github_url
+NXF_AWS_subnet_id
+NXF_AWS_efs_id
+NXF_AWS_accessKey
+NXF_AWS_secretKey
+NXF_AWS_container_id
+NXF_AWS_efs_mnt"
+
+available_fns="describe_vpc
+create_vpc
+shutdown_vpc
+create_nextflow_cluster
+shutdown_nextflow_cluster"
+
 # ----------------------------------------------------------------------------------------
 # setup
 #
@@ -12,7 +28,7 @@ initial_setup() {
     is_env_set=""
     is_env_not=""
     
-    for env_var in "NXF_test" "NXF_username" "NXF_github_url" "NXF_AWS_subnet_id" "NXF_AWS_efs_id" "NXF_AWS_accessKey" "NXF_AWS_secretKey" "NXF_AWS_container_id" "NXF_AWS_efs_mnt"
+    for env_var in $required_env_vars
     do
         # http://unix.stackexchange.com/questions/251893/get-environment-variable-by-variable-name
         if [ "${!env_var}" ]; then 
@@ -71,7 +87,7 @@ initial_setup() {
 # aws setup
 #
 
-setup_vpc() {
+create_vpc() {
     echo "================================"
     echo "| setup vpc                    |"
     echo "================================"
@@ -254,6 +270,7 @@ create_nextflow_cluster() {
         exit
     fi
 }
+
 shutdown_nextflow_cluster() {
     echo "================================"
     echo "| shut down nextflow cluster   |"
@@ -304,13 +321,13 @@ ENDSSH
 initial_setup
 
 if [ $# -eq 0 ]; then
-    echo "No arguments supplied, e.g.: setup_vpc; describe_vpc; shutdown_vpc; create_nextflow_cluster; shutdown_nextflow_cluster;"
+    echo "No arguments supplied:" $available_fns
     exit
 fi
 
 arg=$1
-if [ $arg == "setup_vpc" ]; then
-    setup_vpc
+if [ $arg == "create_vpc" ]; then
+    create_vpc
 elif [ $arg == "setup_efs" ]; then
     setup_efs
 elif [ $arg == "setup_ecr" ]; then
