@@ -2,30 +2,53 @@
 # ----------------------------------------------------------------------------------------
 # Globals (should match nextflow.config)
 #
-username="nextflowuser"
-github_url="hgbrian/nextflow_scripts"
+username="${NXF_username}"
+github_url="${NXF_github_url}"
 
 # ----------------------------------------------------------------------------------------
 # setup
 #
 initial_setup() {
-    # use this id where the raw username is not appropriate?
-    username_sha=$(echo $username | shasum | cut -c1-16)
+    is_env_set=""
+    is_env_not=""
+    
+    for env_var in "NXF_test" "NXF_username" "NXF_github_url" "NXF_AWS_subnet_id" "NXF_AWS_efs_id" "NXF_AWS_accessKey" "NXF_AWS_secretKey" "NXF_AWS_container_id" "NXF_AWS_efs_mnt"
+    do
+        # http://unix.stackexchange.com/questions/251893/get-environment-variable-by-variable-name
+        if [ "${!env_var}" ]; then 
+            is_env_set="$is_env_set,$env_var"
+        else
+            is_env_not="$is_env_not,$env_var"
+        fi
+    done
+    if [ is_env_set == "" ]; then is_env_set="None"; else is_env_set="${is_env_set:1}"; fi
+    if [ is_env_not == "" ]; then is_env_not="None"; else is_env_not="${is_env_not:1}"; fi
 
-    userinfo=$(aws iam get-user --user-name $username --profile $username)
-    userexists=$(echo "$userinfo" |cut -f6)
+    #
+    # use username_sha where the raw username is not appropriate
+    #
+    username_sha=$(echo $username | shasum | cut -c1-16)
 
     #
     # Check if this user has been set up on AWS. If not the user must be set up.
     #
+    userinfo=$(aws iam get-user --user-name $username --profile $username)
+    userexists=$(echo "$userinfo" |cut -f6)
+
     if [ "$userexists" != "$username" ]; then
       echo "no such user: $username/$userexists"
       echo "run 'aws configure --profile $username' to setup; exiting"
       exit
     fi
 
+    #
+    # Get my external ip address
+    #
     external_ip=$(dig +short myip.opendns.com @resolver1.opendns.com)
 
+    #
+    # Check if a VPC and/or nextflow cloud exists already
+    #
     vpcinfo=$(aws ec2 describe-vpcs --output text --profile $username)
     vpc_id=$(echo "$vpcinfo" |cut -f7)
     if [ "$vpc_id" == '' ]; then vpc_id="No VPC available"; fi
@@ -33,12 +56,14 @@ initial_setup() {
     clusterinfo=$(nextflow cloud list)
     
     echo "================================"
-    echo "| config                       |"
+    echo "| current config               |"
     echo "================================"
     echo "username:     $username"
     echo "external_ip:  $external_ip"
     echo "vpc:          $vpc_id"
     echo "cluster:     " $clusterinfo # remove newlines in output by removing quotes
+    echo "is_env_set:   $is_env_set"
+    echo "is_env_not:   $is_env_not"
 }
 
 
@@ -65,8 +90,9 @@ setup_vpc() {
     #
     subnetinfo=$(aws ec2 create-subnet --vpc-id $vpc_id --cidr-block 10.0.0.0/24 --profile $username)
     subnet_id=$(echo "$subnetinfo" |grep $vpc_id |cut -f9)
-    echo "subnet_id:    $subnet_id    [COPY TO nextflow.config]"
-
+    echo "subnet_id:    $subnet_id    [setting env NXF_AWS_subnet_id]"
+    export NXF_AWS_subnet_id="${subnet_id}"
+    
     aws ec2 modify-subnet-attribute --subnet-id $subnet_id --map-public-ip-on-launch --profile $username
 
     #
@@ -216,6 +242,10 @@ setup_ecr() {
 # nextflow
 #
 create_nextflow_cluster() {
+    echo "================================"
+    echo "| create nextflow cluster      |"
+    echo "================================"
+
     nfcinfo=$(nextflow cloud list)
     if [ "$nfcinfo" == "No cluster available" ]; then
         nextflow cloud create ${username}_cluster
@@ -225,11 +255,15 @@ create_nextflow_cluster() {
     fi
 }
 shutdown_nextflow_cluster() {
+    echo "================================"
+    echo "| shut down nextflow cluster   |"
+    echo "================================"
+
     nfcinfo=$(nextflow cloud list)
     if [ "$nfcinfo" == "No cluster available" ]; then
         echo "No cluster available; not shutting cluster down."
     else
-        echo "ssh in and unmount the efs drive"
+        echo "first ssh in and unmount the efs drive"
         #nextflow cloud shutdown ${username}_cluster
     fi
 }
@@ -242,20 +276,23 @@ run_on_cloud() {
 
     aws_cloud_ip=$(aws ec2 describe-instances --profile nextflowuser | grep "^INSTANCES" | head -1 | cut -f13)
     
-ssh -i /Users/briann/.ssh/ssh-key-$username $username@$aws_cloud_ip <<ENDSSH
-    export NXF_username="${NXF_username}"
-    export NXF_AWS_subnet_id="${NXF_AWS_subnet_id}"
-    export NXF_AWS_efs_id="${NXF_AWS_efs_id}"
-    export NXF_AWS_accessKey="${NXF_AWS_accessKey}"
-    export NXF_AWS_secretKey="${NXF_AWS_secretKey}"
-    export NXF_AWS_container_id="${NXF_AWS_container_id}"
-    export NXF_AWS_efs_mnt="${NXF_AWS_efs_mnt}"
+    ssh -i /Users/briann/.ssh/ssh-key-$username $username@$aws_cloud_ip <<ENDSSH
+export NXF_username="${NXF_username}"
+export NXF_AWS_subnet_id="${NXF_AWS_subnet_id}"
+export NXF_AWS_efs_id="${NXF_AWS_efs_id}"
+export NXF_AWS_accessKey="${NXF_AWS_accessKey}"
+export NXF_AWS_secretKey="${NXF_AWS_secretKey}"
+export NXF_AWS_container_id="${NXF_AWS_container_id}"
+export NXF_AWS_efs_mnt="${NXF_AWS_efs_mnt}"
 
-    cd "${NXF_ASSETS}/${github_url}"
-    git pull
-    cd -
-    aws s3 cp --recursive "s3://${NXF_username}-irish-bucket/tmp/pdb" "${NXF_AWS_efs_mnt}/pdb"
-    ./nextflow run ${github_url} -with-docker -profile aws --db "${NXF_AWS_efs_mnt}/pdb/tiny" --out "s3://${NXF_username}-irish-bucket/auto.out"
+cd "${NXF_ASSETS}/${github_url}"
+git pull
+cd -
+aws s3 cp --recursive "s3://${NXF_username}-irish-bucket/tmp/pdb" "${NXF_AWS_efs_mnt}/pdb"
+./nextflow run ${github_url} -with-docker -profile aws \
+-with-dag "s3://${NXF_username}-irish-bucket/dag.png" \
+--db "${NXF_AWS_efs_mnt}/pdb/tiny" \
+--out "s3://${NXF_username}-irish-bucket/blast.out"
 ENDSSH
 }
 
