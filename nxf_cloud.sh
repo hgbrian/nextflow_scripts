@@ -9,6 +9,7 @@
 #
 username="${NXF_username}"
 github_url="${NXF_github_url}"
+s3_bucket="s3://${NXF_username}-irish-bucket"
 
 if [ "${username}" == "" ]; then echo "no NXF_username set; exiting"; exit; fi
 if [ "${github_url}" == "" ]; then echo "no NXF_github_url set; exiting"; exit; fi
@@ -312,15 +313,21 @@ shutdown_nextflow_cluster() {
 
 run_on_cloud() {
     echo "================================"
-    echo "| run ${github_url} on cloud   |"
+    echo "| run on cloud                 |"
     echo "================================"
+    echo "github_url:          ${NXF_github_url}"
     
     if [ "${is_env_not}" != "" ]; then echo "missing environment vars: ${is_env_not}; exiting" exit; fi
 
     aws_cloud_ip=$(aws ec2 describe-instances --profile nextflowuser | grep "^INSTANCES" | head -1 | cut -f13)
 
     ssh -i "/Users/briann/.ssh/ssh-key-${username}" "${username}@${aws_cloud_ip}" <<ENDSSH
+echo "=========================="
+echo "| Preparing for nextflow |"
+echo "=========================="
+
 export NXF_username="${NXF_username}"
+export NXF_github_url="${NXF_github_url}"
 export NXF_AWS_subnet_id="${NXF_AWS_subnet_id}"
 export NXF_AWS_efs_id="${NXF_AWS_efs_id}"
 export NXF_AWS_accessKey="${NXF_AWS_accessKey}"
@@ -328,18 +335,28 @@ export NXF_AWS_secretKey="${NXF_AWS_secretKey}"
 export NXF_AWS_container_id="${NXF_AWS_container_id}"
 export NXF_AWS_efs_mnt="${NXF_AWS_efs_mnt}"
 
-docker_login_cmd=$(aws ecr get-login)
-echo "Logging in to ECR using command: $(echo ${docker_login_cmd} | perl -pe 's/-p (.+?) (.+)/-p pwd $2/g')"
-$docker_login_cmd
+docker pull "${NXF_AWS_container_id}"
 
-cd "${NXF_ASSETS}/${github_url}"
+# Why does this not work? Puzzling.
+docker_login_cmd=\$(aws ecr get-login)
+echo "Logging in to ECR using command: \$(echo ${docker_login_cmd} | perl -pe 's/-p (.+?) (.+)/-p pwd $2/g')"
+$(aws ecr get-login)
+
+echo "=========================="
+echo "| Syncing files          |"
+echo "=========================="
+cd "\${NXF_ASSETS}/\${NXF_github_url}"
 git pull
 cd -
-aws s3 cp --recursive "s3://${NXF_username}-irish-bucket/tmp/pdb" "${NXF_AWS_efs_mnt}/pdb"
+aws s3 cp --recursive "${s3_bucket}/tmp/pdb" "${NXF_AWS_efs_mnt}/pdb"
+
+echo "=========================="
+echo "| Running nextflow       |"
+echo "=========================="
 ./nextflow run ${github_url} -with-docker -profile aws \
--with-dag "s3://${NXF_username}-irish-bucket/dag.png" \
+-with-dag "${s3_bucket}/dag.png" \
 --db "${NXF_AWS_efs_mnt}/pdb/tiny" \
---out "s3://${NXF_username}-irish-bucket/blast.out"
+--out "${s3_bucket}/blast.out"
 ENDSSH
 }
 

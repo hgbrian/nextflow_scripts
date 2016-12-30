@@ -7,6 +7,7 @@ MAINTAINER Brian Naughton
 #
 RUN apt-get update && apt-get install -y \
   nano \
+  graphviz \
   ncbi-blast+
 
 RUN pip install awscli

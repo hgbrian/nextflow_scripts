@@ -6,6 +6,11 @@ This repo shows how to:
 2. run it in docker and pushing the docker image to ECS
 3. run the pipeline on aws cloud using `nextflow cloud`
 
+0. Set up a username and github url
+-----------------------------------
+export NXF_username="hgbrian"
+export NXF_github_url="hgbrian/nextflow_scripts"
+
 
 1. Running the pipeline locally
 -------------------------------
@@ -47,6 +52,7 @@ Then run:
     nextflow run blast.nf -with-docker
 
 
+<!-- 
 CLOUD
 export NXF_AWS_subnet_id="subnet-cc"
 export NXF_AWS_efs_id="fs-dd"
@@ -54,6 +60,8 @@ export NXF_AWS_accessKey="aa"
 export NXF_AWS_secretKey="bb/AU3"
 export NXF_AWS_container_id="3211232.dkr.ecr.eu-west-1.amazonaws.com/nextflowuser_repo"
 aws ecr get-login
+ -->
+
 
 Set up EFS on AWS
 -----------------
@@ -66,19 +74,16 @@ Log into ECR (create a repository for $username if it doesn't exist)
     #319133706199.dkr.ecr.eu-west-1.amazonaws.com/nextflowuser_repo
 
 
-Docker
-------
+Docker and ECR
+--------------
 This `blast` pipeline will be run inside docker:
 
     docker build . -t nextflowuser/blast
 
 The docker image must be tagged with the ECR repo:
 
-    docker tag nextflowuser/blast:latest $ecr_repo
-    docker push $ecr_repo
-
-    ssh into aws
-    ./nextflow run hgbrian/nextflow_scripts -with-docker -profile cloud
+    docker tag ${NXF_username}/blast:latest ${NXF_AWS_container_id}
+    docker push ${NXF_AWS_container_id}
 
 
 nfvpc.sh
