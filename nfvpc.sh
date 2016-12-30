@@ -131,7 +131,6 @@ describe_vpc() {
         igw_id=$(aws ec2 describe-internet-gateways --profile $username |grep -B1 $vpc_id |head -1 | cut -f2)
         echo "igw_id:       $igw_id"
 
-
         efs_id=$(aws efs describe-file-systems --profile $username | grep "^FILESYSTEMS" | head -1 | cut -f4)
         echo "efs_id:       $efs_id"
 
@@ -154,11 +153,12 @@ shutdown_vpc() {
     echo "| shutdown vpc                 |"
     echo "================================"
 
+    aws ec2 detach-internet-gateway --internet-gateway-id $igw_id --vpc-id $vpc_id --profile $username
+    aws ec2 delete-internet-gateway --internet-gateway-id $igw_id --profile $username
+
     aws ec2 delete-network-interface --network-interface-id $eni_id --profile $username
     # aws ec2 delete-security-group --group-id $sg_id --profile $username
     aws ec2 delete-route --route-table-id $rtb_id --destination-cidr-block 0.0.0.0/0 --profile $username
-    aws ec2 detach-internet-gateway --internet-gateway-id $igw_id --vpc-id $vpc_id --profile $username
-    aws ec2 delete-internet-gateway --internet-gateway-id $igw_id --profile $username
     aws ec2 delete-subnet --subnet-id $subnet_id --profile $username
     aws ec2 delete-vpc --vpc-id $vpc_id --profile $username
 }
@@ -227,10 +227,10 @@ create_nextflow_cluster() {
 shutdown_nextflow_cluster() {
     nfcinfo=$(nextflow cloud list)
     if [ "$nfcinfo" == "No cluster available" ]; then
-        echo "No cluster available; not shutting cluster down; exiting"
-        exit
+        echo "No cluster available; not shutting cluster down."
     else
-        nextflow cloud shutdown ${username}_cluster
+        echo "ssh in and unmount the efs drive"
+        #nextflow cloud shutdown ${username}_cluster
     fi
 }
 
@@ -240,9 +240,9 @@ run_on_cloud() {
     echo "| run on cloud                 |"
     echo "================================"
 
-    aws_cloud_ip=$(aws ec2 describe-instances --profile nextflowuser |grep "^INSTANCES" |cut -f13)
+    aws_cloud_ip=$(aws ec2 describe-instances --profile nextflowuser | grep "^INSTANCES" | head -1 | cut -f13)
     
-    ssh -i /Users/briann/.ssh/ssh-key-$username $username@$aws_cloud_ip <<ENDSSH
+ssh -i /Users/briann/.ssh/ssh-key-$username $username@$aws_cloud_ip <<ENDSSH
     export NXF_username="${NXF_username}"
     export NXF_AWS_subnet_id="${NXF_AWS_subnet_id}"
     export NXF_AWS_efs_id="${NXF_AWS_efs_id}"
@@ -256,8 +256,9 @@ run_on_cloud() {
     cd -
     aws s3 cp --recursive "s3://${NXF_username}-irish-bucket/tmp/pdb" "${NXF_AWS_efs_mnt}/pdb"
     ./nextflow run ${github_url} -with-docker -profile aws --db "${NXF_AWS_efs_mnt}/pdb/tiny" --out "s3://${NXF_username}-irish-bucket/auto.out"
-    ENDSSH
+ENDSSH
 }
+
 
 # ----------------------------------------------------------------------------------------
 # Run
