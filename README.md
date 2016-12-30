@@ -1,48 +1,41 @@
-nextflow cloud
-==============
-This repo shows how to:
+Running nextflow cloud
+======================
 
-1. create a simple nextflow pipeline
-2. run it in docker and pushing the docker image to ECS
-3. run the pipeline on aws cloud using `nextflow cloud`
-
-0. Set up a username and github url
------------------------------------
-
-    export NXF_username="hgbrian"
-    export NXF_github_url="hgbrian/nextflow_scripts"
+1. Create a simple nextflow pipeline
+2. Run it in Docker and push the Docker image to AWS EC2 Container Service
+3. Run the pipeline on AWS using `nextflow cloud` and `nxf_cloud.sh`
 
 
 1. Running the pipeline locally
 -------------------------------
 A minimal nextflow pipeline, `blast.nf`, from 
 [nextflow-io/examples](https://www.github.com/nextflow-io/examples) is included.
-The pipeline reads in a local file, `sample.fa` 
-and blasts it against a local protein database, `pdb/tiny`
+The pipeline reads in a local fasta, `sample.fa` 
+and blasts it against a local protein database, `examples/pdb/tiny`
 
-If blastp is installed on your local computer, the pipeline can be run as follows:
+If nextflow and blastp are installed on your local computer, the pipeline can be run as follows:
 
-    nextflow run blast.nf # or equivalently...
-    nextflow run blast.nf -profile standard
+    nextflow run blast.nf
 
 
 2. Running the pipeline in Docker
 ---------------------------------
 By running the pipeline in Docker, we can:
-(a) freeze the environment running the pipeline;
+(a) freeze the environment;
 (b) deploy the Docker image to remote servers.
-
 The included Dockerfile is a minimal miniconda image (based on debian-jessie) 
 that just basically just installs blast.
 
-Build the miniconda Docker image (you must have docker installed):
+First, build the miniconda Docker image (you must have docker installed):
 
     export NXF_username="NXF_$(whoami)"
     docker build . -t "${NXF_username}/blast"
 
-Then run `docker images` and you should see something like this: `NXF_hgbrian/blast    latest   18d0ebc2f62e   19 hours ago   528.8 MB`
+Then run `docker images` and you should see something like this:
+    
+    NXF_hgbrian/blast    latest   18d0ebc2f62e   19 hours ago   528.8 MB
 
-Then to run the pipeline using docker, make sure that the nextflow.config includes:
+Then to run the pipeline using docker, nextflow.config includes the container name:
 
     process {
       container = '${NXF_username}/blast'
@@ -53,19 +46,33 @@ Then run:
     nextflow run blast.nf -with-docker
 
 
-<!-- 
-CLOUD
-export NXF_AWS_subnet_id="subnet-cc"
-export NXF_AWS_efs_id="fs-dd"
-export NXF_AWS_accessKey="aa"
-export NXF_AWS_secretKey="bb/AU3"
-export NXF_AWS_container_id="3211232.dkr.ecr.eu-west-1.amazonaws.com/nextflowuser_repo"
-aws ecr get-login
- -->
+
+3. Running the pipeline in Docker on AWS
+----------------------------------------
+To run this pipeline on the cloud, we need to do two things:
+- move the code over to the cloud
+- move the data over to the cloud
+
+There are two scripts being used:
+- **nxf_cloud.sh** : a bash script to help manage the VPC, cloud, etc.
+- **nextflow.config** : the config file includes information on the cloud setup
+
+Because these two files need to share information (and so does the cloud), I'll set 
+some environment variables:
+- **NXF_username** : a username for this project (e.g., NXF_hgbrian)
+- **NXF_github_repo** : the location of the code (e.g., hgbrian/nextflow_scripts)
+- **NXF_static_path** : the location of the data
 
 
-Set up EFS on AWS
------------------
+3a. Set up a username and github url
+-----------------------------------
+
+    export NXF_username="hgbrian"
+    export NXF_github_url="hgbrian/nextflow_scripts"
+
+
+3b. Set up EFS on AWS
+---------------------
 
 Create a filesystem associated with this $username (one filesystem per user)
     ./nfvpc.sh setup_efs
@@ -75,8 +82,8 @@ Log into ECR (create a repository for $username if it doesn't exist)
     #319133706199.dkr.ecr.eu-west-1.amazonaws.com/nextflowuser_repo
 
 
-Docker and ECR
---------------
+3c. Docker and ECR
+------------------
 This `blast` pipeline will be run inside docker:
 
     docker build . -t nextflowuser/blast
@@ -85,6 +92,8 @@ The docker image must be tagged with the ECR repo:
 
     docker tag ${NXF_username}/blast:latest ${NXF_AWS_container_id}
     docker push ${NXF_AWS_container_id}
+
+
 
 
 nfvpc.sh
