@@ -1,23 +1,34 @@
 #!/bin/bash
 
+# ----------------------------------------------------------------------------------------
+# To use:
+#
+# 0. Set global env vars NXF_username NXF_github_url
 # 1. Create an AWS VPC:  ./nxf_cloud.sh create_vpc
 # 2. Create an EFS:      ./nxf_cloud.sh create_efs
+#
 
 # ----------------------------------------------------------------------------------------
-# Globals (should match nextflow.config)
+# Globals
 # All these environment variables will need to be set to run `nextflow cloud`
 #
 username="${NXF_username}"
 github_url="${NXF_github_url}"
-s3_bucket="s3://${NXF_username}-irish-bucket"
+s3_static_dir="/pdb"
 
-if [ "${username}" == "" ]; then echo "no NXF_username set; exiting"; exit; fi
-if [ "${github_url}" == "" ]; then echo "no NXF_github_url set; exiting"; exit; fi
+
+if [ "${username}" == "" ]; then echo "no NXF_username env var set; exiting"; exit; fi
+if [ "${github_url}" == "" ]; then echo "no NXF_github_url env var set; exiting"; exit; fi
+if [ "${s3_static_dir}" == "" ]; then echo "no s3_static_dir env var set; exiting"; exit; fi
+
 
 # ----------------------------------------------------------------------------------------
+# Some derived globals
 #
 env_vars_file="env_vars.${NXF_username}.export"
 reponame="${NXF_username}_repo"
+s3_bucket="s3://${NXF_username}-irish-bucket"
+# FIXFIX check if s3_bucket exists
 
 required_env_vars="NXF_username
 NXF_github_url
@@ -93,6 +104,7 @@ initial_setup() {
     echo "| current config               |"
     echo "================================"
     echo "username:       ${username}"
+    echo "github_url:     ${github_url}"
     echo "external_ip:    ${external_ip}"
     echo "vpc:            ${vpc_id}"
     echo "cluster:       " ${clusterinfo} # remove newlines in output by removing quotes
@@ -339,16 +351,21 @@ docker pull "${NXF_AWS_container_id}"
 
 # Why does this not work? Puzzling.
 docker_login_cmd=\$(aws ecr get-login)
-echo "Logging in to ECR using command: \$(echo ${docker_login_cmd} | perl -pe 's/-p (.+?) (.+)/-p pwd $2/g')"
+echo "Logging in to ECR using command: \$(echo \${docker_login_cmd} | perl -pe 's/-p (.+?) (.+)/-p pwd $2/g')"
 $(aws ecr get-login)
 
 echo "=========================="
 echo "| Syncing files          |"
 echo "=========================="
-cd "\${NXF_ASSETS}/\${NXF_github_url}"
-git pull
-cd -
-aws s3 cp --recursive "${s3_bucket}/tmp/pdb" "${NXF_AWS_efs_mnt}/pdb"
+if [ -d "\${NXF_ASSETS}/${NXF_github_url}" ]; then
+    cd "\${NXF_ASSETS}/${NXF_github_url}"
+    git pull
+    cd -
+fi
+
+if [ ! -d "${NXF_AWS_efs_mnt}${s3_static_dir}" ]; then
+    aws s3 cp --recursive "${s3_bucket}${s3_static_dir}" "${NXF_AWS_efs_mnt}${s3_static_dir}"
+fi
 
 echo "=========================="
 echo "| Running nextflow       |"
