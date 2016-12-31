@@ -18,22 +18,27 @@
 #
 username="${NXF_username}"
 github_repo="${NXF_github_repo}"
+
 static_path="${NXF_static_path}"
 out_path="${NXF_out_path}"
+
 
 if [ "${username}" == "" ]; then echo "no NXF_username env var set; exiting"; exit; fi
 if [ "${github_repo}" == "" ]; then echo "no NXF_github_repo env var set; exiting"; exit; fi
 if [ "${static_path}" == "" ]; then echo "no static_path env var set; exiting"; exit; fi
 if [ "${out_path}" == "" ]; then echo "no out_path env var set; exiting"; exit; fi
 
+# AWS keys must also be set
+if [ "${NXF_AWS_accessKey}" == "" ] || [ "${NXF_AWS_secretKey}" == "" ]; then 
+    echo "no AWS credentials env vars set; exiting"
+    exit
+fi
 
 # ----------------------------------------------------------------------------------------
 # Some derived globals
 #
-env_vars_file="env_vars.${NXF_username}.export"
 reponame="${NXF_username}_repo"
-s3_bucket="s3://${NXF_username}-irish-bucket"
-# FIXFIX check if s3_bucket exists
+env_vars_file="env_vars.${NXF_username}.export"
 
 required_env_vars="NXF_username
 NXF_github_repo
@@ -109,7 +114,7 @@ initial_setup() {
     echo "| current config               |"
     echo "================================"
     echo "username:       ${username}"
-    echo "github_repo:     ${github_repo}"
+    echo "github_repo:    ${github_repo}"
     echo "external_ip:    ${external_ip}"
     echo "vpc:            ${vpc_id}"
     echo "cluster:       " ${clusterinfo} # remove newlines in output by removing quotes
@@ -373,15 +378,14 @@ if [ "${static_path::5}" == "s3://" ]; then
         aws s3 cp --recursive "${static_path}" "${NXF_AWS_efs_mnt}/${static_path:5}"
     fi
 else
-    echo "only s3 static_paths supported"
+    echo "NotImplementedError: only s3 static_paths supported"
     exit
 fi
 
 echo "=========================="
 echo "| Running nextflow       |"
 echo "=========================="
-./nextflow run ${github_repo} -with-docker -profile aws \
--with-dag "${s3_bucket}/dag.png" \
+./nextflow run ${github_repo} -with-docker -profile aws -with-dag "${out_path}-dag.png" \
 --db "${NXF_AWS_efs_mnt}/pdb/tiny" \
 --out "${out_path}"
 ENDSSH
@@ -399,29 +403,49 @@ if [ $# -eq 0 ]; then
     exit
 fi
 
-arg=$1
-if [ $arg == "create_vpc" ]; then
+
+while [ "$1" != "" ]; do
+    case $1 in
+        describe_vpc )          shift
+                                arg=$1
+                                ;;
+        -f | --file )           shift
+                                filename=$1
+                                ;;
+        -s | --static_path )    interactive=1
+                                ;;
+        -h | --help )           usage
+                                exit
+                                ;;
+        * )                     usage
+                                exit 1
+    esac
+    shift
+done
+
+#arg=$1
+if [ arg == "create_vpc" ]; then
     create_vpc
     describe_vpc
-elif [ $arg == "setup_efs" ]; then
+elif [ arg == "setup_efs" ]; then
     setup_efs
     describe_vpc
-elif [ $arg == "setup_ecr" ]; then
+elif [ arg == "setup_ecr" ]; then
     setup_ecr
     describe_vpc
-elif [ $arg == "shutdown_vpc" ]; then
+elif [ arg == "shutdown_vpc" ]; then
     shutdown_nextflow_cluster
     shutdown_vpc
     describe_vpc
-elif [ $arg == "create_nextflow_cluster" ]; then
+elif [ arg == "create_nextflow_cluster" ]; then
     create_nextflow_cluster
     describe_vpc
-elif [ $arg == "shutdown_nextflow_cluster" ]; then
+elif [ arg == "shutdown_nextflow_cluster" ]; then
     shutdown_nextflow_cluster
     describe_vpc
-elif [ $arg == "describe_vpc" ]; then
+elif [ arg == "describe_vpc" ]; then
     describe_vpc
-elif [ $arg == "run_on_cloud" ]; then
+elif [ arg == "run_on_cloud" ]; then
     run_on_cloud
 else
     printf "\n[No arguments supplied]\n"

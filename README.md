@@ -1,5 +1,5 @@
-Running nextflow cloud
-======================
+Running nextflow cloud on AWS
+=============================
 
 1. Create a simple nextflow pipeline
 2. Run it in Docker and push the Docker image to AWS EC2 Container Service
@@ -8,6 +8,7 @@ Running nextflow cloud
 
 1. Running the pipeline locally
 -------------------------------
+
 A minimal nextflow pipeline, `blast.nf`, from 
 [nextflow-io/examples](https://www.github.com/nextflow-io/examples) is included.
 The pipeline reads in a local fasta, `sample.fa` 
@@ -35,13 +36,13 @@ Then run `docker images` and you should see something like this:
     
     NXF_hgbrian/blast    latest   18d0ebc2f62e   19 hours ago   528.8 MB
 
-Then to run the pipeline using docker, nextflow.config includes the container name:
+Then to run the pipeline with docker, nextflow.config must include the container name:
 
     process {
       container = '${NXF_username}/blast'
     }
     
-Then run:
+Run and the output should be the same:
 
     nextflow run blast.nf -with-docker
 
@@ -55,34 +56,37 @@ To run this pipeline on the cloud, we need to do two things:
 
 There are two scripts being used:
 - **nxf_cloud.sh** : a bash script to help manage the VPC, cloud, etc.
-- **nextflow.config** : the config file includes information on nextflow and cloud setup
+- **nextflow.config** : the nextflow config file also includes information on nextflow's cloud setup
 
 
 Because these two files need to share information, 
-I'll set three environment variables:
-- **NXF_username** : a username for this project (e.g., NXF_hgbrian)
+I'll first set four environment variables:
+- **NXF_username**    : a username for this project (e.g., NXF_hgbrian)
 - **NXF_github_repo** : the location of the code (e.g., hgbrian/nextflow_scripts)
 - **NXF_static_path** : the location of the data (e.g., /pdb, s3://${static_bucket}/pdb)
-- **NXF_out_path** : the location where results should be written (e.g., results.txt, s3://${out_bucket}/results.txt)
+- **NXF_out_path**    : the location where results should be written (e.g., results.txt, s3://${out_bucket}/results.txt)
 
 I'll also need to set up an AWS user. These credentials must be stored somewhere:
 - **NXF_accessKey**
 - **NXF_secretKey**
 
-    aws iam create-access-key --user-name ${NXF_username}
+Create a new user to get the secret key:
+
+    aws iam create-access-key --user-name ${NXF_username} > ${NXF_username}_credentials.txt
 
 The user must have access to EC2, EFS, s3, etc. 
-Administrators have all these permissions (and more).
+For example, administrators have all these permissions.
 Check what groups are assigned to this user (probably none) and add to group "administrators".
 
     aws iam list-groups-for-user --user-name ${NXF_username} --output text
     aws iam add-user-to-group --group-name administrators --user-name ${NXF_username}
 
 
-3b. Set up EFS on AWS
----------------------
+3b. Set up a cluster on AWS
+---------------------------
 
 Create a filesystem associated with this $username (one filesystem per user)
+    ./nfvpc.sh setup_vpc
     ./nfvpc.sh setup_efs
 
 Log into ECR (create a repository for $username if it doesn't exist)
