@@ -19,11 +19,12 @@
 username="${NXF_username}"
 github_repo="${NXF_github_repo}"
 static_path="${NXF_static_path}"
-
+out_path="${NXF_out_path}"
 
 if [ "${username}" == "" ]; then echo "no NXF_username env var set; exiting"; exit; fi
 if [ "${github_repo}" == "" ]; then echo "no NXF_github_repo env var set; exiting"; exit; fi
 if [ "${static_path}" == "" ]; then echo "no static_path env var set; exiting"; exit; fi
+if [ "${out_path}" == "" ]; then echo "no out_path env var set; exiting"; exit; fi
 
 
 # ----------------------------------------------------------------------------------------
@@ -39,7 +40,7 @@ NXF_github_repo
 NXF_AWS_subnet_id
 NXF_AWS_efs_id
 NXF_AWS_efs_mnt
-NXF_AWS_container_id
+NXF_AWS_container
 NXF_AWS_accessKey
 NXF_AWS_secretKey"
 
@@ -210,7 +211,7 @@ describe_vpc() {
 
         ecr_url=$(aws ecr describe-repositories --profile $username | grep "^REPOSITORIES" | head -1 | cut -f6)
         echo "ecr_url:      ${ecr_url:-[None]}"
-        echo "export NXF_AWS_container_id=${ecr_url}" >>"${env_vars_file}"
+        echo "export NXF_AWS_container=${ecr_url}" >>"${env_vars_file}"
         
         echo "# To sync, run:"
         echo "source ${env_vars_file}"
@@ -348,10 +349,10 @@ export NXF_AWS_subnet_id="${NXF_AWS_subnet_id}"
 export NXF_AWS_efs_id="${NXF_AWS_efs_id}"
 export NXF_AWS_accessKey="${NXF_AWS_accessKey}"
 export NXF_AWS_secretKey="${NXF_AWS_secretKey}"
-export NXF_AWS_container_id="${NXF_AWS_container_id}"
+export NXF_AWS_container="${NXF_AWS_container}"
 export NXF_AWS_efs_mnt="${NXF_AWS_efs_mnt}"
 
-docker pull "${NXF_AWS_container_id}"
+docker pull "${NXF_AWS_container}"
 
 # Why does this not work? Puzzling.
 docker_login_cmd=\$(aws ecr get-login)
@@ -367,8 +368,13 @@ if [ -d "\${NXF_ASSETS}/${NXF_github_repo}" ]; then
     cd -
 fi
 
-if [ ! -d "${NXF_AWS_efs_mnt}${static_path}" ]; then
-    aws s3 cp --recursive "${s3_bucket}${static_path}" "${NXF_AWS_efs_mnt}${static_path}"
+if [ "${static_path::5}" == "s3://" ]; then
+    if [ ! -d "${NXF_AWS_efs_mnt}/${static_path:5}" ]; then
+        aws s3 cp --recursive "${static_path}" "${NXF_AWS_efs_mnt}/${static_path:5}"
+    fi
+else
+    echo "only s3 static_paths supported"
+    exit
 fi
 
 echo "=========================="
@@ -377,7 +383,7 @@ echo "=========================="
 ./nextflow run ${github_repo} -with-docker -profile aws \
 -with-dag "${s3_bucket}/dag.png" \
 --db "${NXF_AWS_efs_mnt}/pdb/tiny" \
---out "${s3_bucket}/blast.out"
+--out "${out_path}"
 ENDSSH
 }
 
