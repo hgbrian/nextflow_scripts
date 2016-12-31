@@ -55,14 +55,28 @@ To run this pipeline on the cloud, we need to do two things:
 
 There are two scripts being used:
 - **nxf_cloud.sh** : a bash script to help manage the VPC, cloud, etc.
-- **nextflow.config** : the config file includes information on the cloud setup
+- **nextflow.config** : the config file includes information on nextflow and cloud setup
+
 
 Because these two files need to share information, 
 I'll set three environment variables:
 - **NXF_username** : a username for this project (e.g., NXF_hgbrian)
 - **NXF_github_repo** : the location of the code (e.g., hgbrian/nextflow_scripts)
-- **NXF_static_path** : the location of the data (e.g., /pdb)
+- **NXF_static_path** : the location of the data (e.g., /pdb, s3://${static_bucket}/pdb)
+- **NXF_out_path** : the location where results should be written (e.g., results.txt, s3://${out_bucket}/results.txt)
 
+I'll also need to set up an AWS user. These credentials must be stored somewhere:
+- **NXF_accessKey**
+- **NXF_secretKey**
+
+    aws iam create-access-key --user-name ${NXF_username}
+
+The user must have access to EC2, EFS, s3, etc. 
+Administrators have all these permissions (and more).
+Check what groups are assigned to this user (probably none) and add to group "administrators".
+
+    aws iam list-groups-for-user --user-name ${NXF_username} --output text
+    aws iam add-user-to-group --group-name administrators --user-name ${NXF_username}
 
 
 3b. Set up EFS on AWS
@@ -90,8 +104,8 @@ The docker image must be tagged with the ECR repo:
 
 
 
-nfvpc.sh
-========
+nxf_cloud.sh
+============
 A script that creates and/or destroys a single-use VPC on AWS for use by `nextflow cloud`. 
 The idea is to be able to create a VPC to enable running a nextflow job on the cloud, 
 then tear down everything so that there are no lingering elements on AWS. 
