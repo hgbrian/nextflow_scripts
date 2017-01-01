@@ -188,10 +188,7 @@ describe_vpc() {
 
         ecr_url=$(aws ecr describe-repositories --profile $username | grep "^REPOSITORIES" | head -1 | cut -f6)
         echo "ecr_url:      ${ecr_url:-[None]}"
-        echo "export NXF_AWS_container=${ecr_url}" >>"${env_vars_file}"
-        
-        echo "# To sync, run:"
-        echo "source ${env_vars_file}"
+        echo "export NXF_AWS_container=${ecr_url}" >>"${env_vars_file}"        
     else
         echo "No vpc exists; exiting"
         exit
@@ -373,7 +370,6 @@ usage() {
     printf "\n${available_fns}\n"
 }
 
-initial_setup
 
 if [ $# -eq 0 ]; then
     printf "\n[No arguments supplied]\n"
@@ -406,6 +402,49 @@ while [ "$1" != "" ]; do
 done
 
 
+# ----------------------------------------------------------------------------------------
+# Globals
+# All these environment variables will need to be set to run `nextflow cloud`
+#
+
+if [ "${username}" == "" ] && [ "${NXF_username}" ]; then username="${NXF_username}"; fi
+if [ "${github_repo}" == "" ] && [ "${NXF_github_repo}" ]; then username="${NXF_github_repo}"; fi
+if [ "${static_path}" == "" ] && [ "${NXF_static_path}" ]; then static_path="${NXF_static_path}"; fi
+if [ "${out_path}" == "" ] && [ "${NXF_out_path}" ]; then out_path="${NXF_out_path}"; fi
+
+if [ "${username}" == "" ]; then echo "no NXF_username env var set; exiting"; exit 1; fi
+if [ "${github_repo}" == "" ]; then echo "no NXF_github_repo env var set; exiting"; exit 1; fi
+if [ "${static_path}" == "" ]; then echo "no static_path env var set; exiting"; exit 1; fi
+if [ "${out_path}" == "" ]; then echo "no out_path env var set; exiting"; exit 1; fi
+
+# AWS keys must also be set
+if [ "${NXF_AWS_accessKey}" ] || [ "${NXF_AWS_secretKey}" ]; then 
+    AWS_accessKey="${NXF_AWS_accessKey}"
+    AWS_secretKey="${NXF_AWS_secretKey}"
+elif [ "${AWS_ACCESS_KEY_ID}" ] && [ "${AWS_SECRET_ACCESS_KEY}" ]; then
+    AWS_accessKey="${AWS_ACCESS_KEY_ID}"
+    AWS_secretKey="${AWS_SECRET_ACCESS_KEY}"
+elif [ "${AWS_ACCESS_KEY}" ] && [ "${AWS_SECRET_KEY}" ]; then
+    AWS_accessKey="${AWS_ACCESS_KEY}"
+    AWS_secretKey="${AWS_SECRET_KEY}"
+else
+    printf "no AWS credentials set\nexiting"
+    exit 1
+fi
+
+# ----------------------------------------------------------------------------------------
+# Some derived globals
+#
+reponame="${username}_repo"
+env_vars_file="env_vars.${username}.export"
+
+
+# ----------------------------------------------------------------------------------------
+# Run code
+#
+initial_setup
+
+
 if [ $arg == "create_vpc" ]; then
     create_vpc
     describe_vpc
@@ -436,41 +475,5 @@ else
 fi
 
 
-
-# ----------------------------------------------------------------------------------------
-# Globals
-# All these environment variables will need to be set to run `nextflow cloud`
-#
-
-if [ "${username}" == "" ] && [ "${NXF_username}" ]; then username="${NXF_username}"; fi
-if [ "${github_repo}" == "" ] && [ "${NXF_github_repo}" ]; then username="${NXF_github_repo}"; fi
-if [ "${static_path}" == "" ] && [ "${NXF_static_path}" ]; then static_path="${NXF_static_path}"; fi
-if [ "${out_path}" == "" ] && [ "${NXF_out_path}" ]; then out_path="${NXF_out_path}"; fi
-
-if [ "${username}" == "" ]; then echo "no NXF_username env var set; exiting"; exit 1; fi
-if [ "${github_repo}" == "" ]; then echo "no NXF_github_repo env var set; exiting"; exit 1; fi
-if [ "${static_path}" == "" ]; then echo "no static_path env var set; exiting"; exit 1; fi
-if [ "${out_path}" == "" ]; then echo "no out_path env var set; exiting"; exit 1; fi
-
-# AWS keys must also be set
-if [ "${NXF_AWS_accessKey}" ] || [ "${NXF_AWS_secretKey}" ]; then 
-    AWS_accessKey="${NXF_AWS_accessKey}"
-    AWS_secretKey="${NXF_AWS_secretKey}"
-else if [ "${AWS_ACCESS_KEY_ID}" ] && [ "${AWS_SECRET_ACCESS_KEY}" ]
-    AWS_accessKey="${AWS_ACCESS_KEY_ID}"
-    AWS_secretKey="${AWS_SECRET_ACCESS_KEY}"
-else if [ "${AWS_ACCESS_KEY}" ] && [ "${AWS_SECRET_KEY}" ]
-    AWS_accessKey="${AWS_ACCESS_KEY}"
-    AWS_secretKey="${AWS_SECRET_KEY}"
-else
-    printf "no AWS credentials env vars set\nexiting"
-    exit 1
-fi
-
-# ----------------------------------------------------------------------------------------
-# Some derived globals
-#
-reponame="${username}_repo"
-env_vars_file="env_vars.${username}.export"
 
 
