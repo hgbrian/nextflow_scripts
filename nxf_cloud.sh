@@ -127,7 +127,7 @@ create_vpc() {
     # Security group. Use the default VPC security group and add rules to it to allow ssh
     # Creating a security group and attaching it did not work but would be better
     #
-    sg_id=$(aws ec2 describe-security-groups --output text --profile nextflowuser |grep $vpc_id |cut -f3)
+    sg_id=$(aws ec2 describe-security-groups --output text --profile $username |grep $vpc_id |cut -f3)
     echo "sg_id:        ${sg_id:-[None]}"
          
     aws ec2 authorize-security-group-ingress --group-id $sg_id --protocol tcp --port 22 --cidr $external_ip/32 --profile $username
@@ -238,7 +238,7 @@ setup_efs() {
 
     echo "[WARNING] Not mounting fs??? nextflow does it"
     # I may not need to do this? (cut -f4 to get fsmt-id)
-    #aws efs create-mount-target --file-system-id fs-6af50da3 --subnet-id subnet-9a4462ec --profile nextflowuser
+    #aws efs create-mount-target --file-system-id fs-6af50da3 --subnet-id subnet-9a4462ec --profile $username
 }
 
 # ----------------------------------------------------------------------------------------
@@ -310,7 +310,7 @@ run_on_cloud() {
     
     if [ "${is_env_not}" != "" ]; then echo "missing environment vars: ${is_env_not}; exiting" exit; fi
 
-    aws_cloud_ip=$(aws ec2 describe-instances --profile nextflowuser | grep "^INSTANCES" | head -1 | cut -f13)
+    aws_cloud_ip=$(aws ec2 describe-instances --profile $username | grep "^INSTANCES" | head -1 | cut -f13)
 
     ssh -i "/Users/briann/.ssh/ssh-key-${username}" "${username}@${aws_cloud_ip}" <<ENDSSH
 echo "=========================="
@@ -455,15 +455,15 @@ elif [ $arg == "setup_ecr" ]; then
     setup_ecr
     describe_vpc
 elif [ $arg == "shutdown_vpc" ]; then
+    describe_vpc
     shutdown_nextflow_cluster
     shutdown_vpc
-    describe_vpc
 elif [ $arg == "create_nextflow_cluster" ]; then
     create_nextflow_cluster
     describe_vpc
 elif [ $arg == "shutdown_nextflow_cluster" ]; then
-    shutdown_nextflow_cluster
     describe_vpc
+    shutdown_nextflow_cluster
 elif [ $arg == "describe_vpc" ]; then
     describe_vpc
 elif [ $arg == "run_on_cloud" ]; then
