@@ -12,34 +12,6 @@
 # 2. Create an EFS:      ./nxf_cloud.sh create_efs
 #
 
-# ----------------------------------------------------------------------------------------
-# Globals
-# All these environment variables will need to be set to run `nextflow cloud`
-#
-username="${NXF_username}"
-github_repo="${NXF_github_repo}"
-
-static_path="${NXF_static_path}"
-out_path="${NXF_out_path}"
-
-
-if [ "${username}" == "" ]; then echo "no NXF_username env var set; exiting"; exit; fi
-if [ "${github_repo}" == "" ]; then echo "no NXF_github_repo env var set; exiting"; exit; fi
-if [ "${static_path}" == "" ]; then echo "no static_path env var set; exiting"; exit; fi
-if [ "${out_path}" == "" ]; then echo "no out_path env var set; exiting"; exit; fi
-
-# AWS keys must also be set
-if [ "${NXF_AWS_accessKey}" == "" ] || [ "${NXF_AWS_secretKey}" == "" ]; then 
-    echo "no AWS credentials env vars set; exiting"
-    exit
-fi
-
-# ----------------------------------------------------------------------------------------
-# Some derived globals
-#
-reponame="${NXF_username}_repo"
-env_vars_file="env_vars.${NXF_username}.export"
-
 required_env_vars="NXF_username
 NXF_github_repo
 NXF_AWS_subnet_id
@@ -54,6 +26,7 @@ create_vpc
 shutdown_vpc
 create_nextflow_cluster
 shutdown_nextflow_cluster"
+
 
 # ----------------------------------------------------------------------------------------
 # initial setup
@@ -71,7 +44,6 @@ initial_setup() {
         if [ "${!env_var}" ]; then 
             is_env_set="${is_env_set} ${env_var}"
         else
-            echo "yes"
             is_env_not="${is_env_not} ${env_var}"
         fi
     done
@@ -116,7 +88,7 @@ initial_setup() {
     echo "username:       ${username}"
     echo "github_repo:    ${github_repo}"
     echo "external_ip:    ${external_ip}"
-    echo "vpc:            ${vpc_id}"
+    echo "vpc:            ${vpc_id:-[None]}"
     echo "cluster:       " ${clusterinfo} # remove newlines in output by removing quotes
     echo "envs_are_set:   ${is_env_set:-[None]}"
     echo "envs_not_set:   ${is_env_not:-[None]}"
@@ -393,29 +365,39 @@ ENDSSH
 
 
 # ----------------------------------------------------------------------------------------
-# Run
+# Running the code
 #
+
+usage() {
+    printf "Available functions:"
+    printf "\n${available_fns}\n"
+}
 
 initial_setup
 
 if [ $# -eq 0 ]; then
     printf "\n[No arguments supplied]\n"
-    exit
+    usage
+    exit 1
 fi
 
+arg=$1
+shift
 
+# http://linuxcommand.org/wss0130.php
 while [ "$1" != "" ]; do
     case $1 in
-        describe_vpc )          shift
-                                arg=$1
+        -u | --username )       shift
+                                username=$1
                                 ;;
-        -f | --file )           shift
-                                filename=$1
+        -g | --github_repo )    shift
+                                github_repo=$1
                                 ;;
-        -s | --static_path )    interactive=1
+        -s | --static_path )    shift
+                                static_path=$1
                                 ;;
-        -h | --help )           usage
-                                exit
+        -o | --out_path )       shift
+                                out_path=$1
                                 ;;
         * )                     usage
                                 exit 1
@@ -423,31 +405,72 @@ while [ "$1" != "" ]; do
     shift
 done
 
-#arg=$1
-if [ arg == "create_vpc" ]; then
+
+if [ $arg == "create_vpc" ]; then
     create_vpc
     describe_vpc
-elif [ arg == "setup_efs" ]; then
+elif [ $arg == "setup_efs" ]; then
     setup_efs
     describe_vpc
-elif [ arg == "setup_ecr" ]; then
+elif [ $arg == "setup_ecr" ]; then
     setup_ecr
     describe_vpc
-elif [ arg == "shutdown_vpc" ]; then
+elif [ $arg == "shutdown_vpc" ]; then
     shutdown_nextflow_cluster
     shutdown_vpc
     describe_vpc
-elif [ arg == "create_nextflow_cluster" ]; then
+elif [ $arg == "create_nextflow_cluster" ]; then
     create_nextflow_cluster
     describe_vpc
-elif [ arg == "shutdown_nextflow_cluster" ]; then
+elif [ $arg == "shutdown_nextflow_cluster" ]; then
     shutdown_nextflow_cluster
     describe_vpc
-elif [ arg == "describe_vpc" ]; then
+elif [ $arg == "describe_vpc" ]; then
     describe_vpc
-elif [ arg == "run_on_cloud" ]; then
+elif [ $arg == "run_on_cloud" ]; then
     run_on_cloud
 else
-    printf "\n[No arguments supplied]\n"
-    exit
+    printf "\n[No allowed arguments supplied]\n"
+    usage
+    exit 1
 fi
+
+
+
+# ----------------------------------------------------------------------------------------
+# Globals
+# All these environment variables will need to be set to run `nextflow cloud`
+#
+
+if [ "${username}" == "" ] && [ "${NXF_username}" ]; then username="${NXF_username}"; fi
+if [ "${github_repo}" == "" ] && [ "${NXF_github_repo}" ]; then username="${NXF_github_repo}"; fi
+if [ "${static_path}" == "" ] && [ "${NXF_static_path}" ]; then static_path="${NXF_static_path}"; fi
+if [ "${out_path}" == "" ] && [ "${NXF_out_path}" ]; then out_path="${NXF_out_path}"; fi
+
+if [ "${username}" == "" ]; then echo "no NXF_username env var set; exiting"; exit 1; fi
+if [ "${github_repo}" == "" ]; then echo "no NXF_github_repo env var set; exiting"; exit 1; fi
+if [ "${static_path}" == "" ]; then echo "no static_path env var set; exiting"; exit 1; fi
+if [ "${out_path}" == "" ]; then echo "no out_path env var set; exiting"; exit 1; fi
+
+# AWS keys must also be set
+if [ "${NXF_AWS_accessKey}" ] || [ "${NXF_AWS_secretKey}" ]; then 
+    AWS_accessKey="${NXF_AWS_accessKey}"
+    AWS_secretKey="${NXF_AWS_secretKey}"
+else if [ "${AWS_ACCESS_KEY_ID}" ] && [ "${AWS_SECRET_ACCESS_KEY}" ]
+    AWS_accessKey="${AWS_ACCESS_KEY_ID}"
+    AWS_secretKey="${AWS_SECRET_ACCESS_KEY}"
+else if [ "${AWS_ACCESS_KEY}" ] && [ "${AWS_SECRET_KEY}" ]
+    AWS_accessKey="${AWS_ACCESS_KEY}"
+    AWS_secretKey="${AWS_SECRET_KEY}"
+else
+    printf "no AWS credentials env vars set\nexiting"
+    exit 1
+fi
+
+# ----------------------------------------------------------------------------------------
+# Some derived globals
+#
+reponame="${username}_repo"
+env_vars_file="env_vars.${username}.export"
+
+
