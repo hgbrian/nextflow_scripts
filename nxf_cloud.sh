@@ -21,7 +21,7 @@ NXF_AWS_container
 NXF_AWS_accessKey
 NXF_AWS_secretKey"
 
-available_fns="get_vpc_info
+available_fns="get_cloud_info
 create_vpc
 shutdown_vpc
 create_nextflow_cluster
@@ -34,7 +34,7 @@ shutdown_nextflow_cluster"
 # Get information on whether a cluster exists/
 # Get external IP.
 #
-initial_setup() {
+get_config() {
     is_env_set=""
     is_env_not=""
     
@@ -149,9 +149,9 @@ create_vpc() {
     fi
 }
 
-get_vpc_info() {
+get_cloud_info() {
     echo "================================"
-    echo "| describe vpc / set up env    |"
+    echo "| get cloud info               |"
     echo "================================"
 
     vpcinfo=$(aws ec2 describe-vpcs --output text --profile $username)
@@ -187,9 +187,9 @@ get_vpc_info() {
         #echo "export NXF_AWS_container=${ecr_url}" >>"${env_vars_file}"
         
         #echo "writing out nextflow.nxf_cloud2.config"
-        cat nextflow.nxf_cloud.config | \
+        cat nextflow.config | \
         awk '{while(match($0,"[$]{[^}]*}")) {var=substr($0,RSTART+2,RLENGTH -3);gsub("[$]{"var"}",ENVIRON[var])}}1' \
-        > nextflow.nxf_cloud.with_env.config
+        > nextflow.env_vars.config
 
     else
         echo "No vpc exists; exiting"
@@ -201,7 +201,7 @@ get_vpc_info() {
 # ----------------------------------------------------------------------------------------
 # Shut down VPC, attempt to delete all traces from AWS
 # This can go wrong if the EFS is till mounted.
-# Variables in here come are initialized during get_vpc_info
+# Variables in here come are initialized during get_cloud_info
 #
 shutdown_vpc() {
     echo "================================"
@@ -357,9 +357,9 @@ fi
 echo "============================="
 echo "| Running nextflow on cloud |"
 echo "============================="
-./nextflow run ${github_repo} -with-docker -profile aws -with-dag "${out_path}-dag.png" \
+./nextflow run ${github_repo} -with-docker -profile aws -with-dag "${out_file}-dag.png" \
 --db "${NXF_AWS_efs_mnt}/pdb/tiny" \
---out "${out_path}"
+--out "${out_file}"
 ENDSSH
 }
 
@@ -395,8 +395,8 @@ while [ "$1" != "" ]; do
         -s | --static_path )    shift
                                 static_path=$1
                                 ;;
-        -o | --out_path )       shift
-                                out_path=$1
+        -o | --out_file )       shift
+                                out_file=$1
                                 ;;
         * )                     usage
                                 exit 1
@@ -413,12 +413,12 @@ done
 if [ "${username}" == "" ] && [ "${NXF_username}" ];       then username="${NXF_username}"; fi
 if [ "${github_repo}" == "" ] && [ "${NXF_github_repo}" ]; then username="${NXF_github_repo}"; fi
 if [ "${static_path}" == "" ] && [ "${NXF_static_path}" ]; then static_path="${NXF_static_path}"; fi
-if [ "${out_path}" == "" ] && [ "${NXF_out_path}" ];       then out_path="${NXF_out_path}"; fi
+if [ "${out_file}" == "" ] && [ "${NXF_out_file}" ];       then out_file="${NXF_out_file}"; fi
 
 if [ "${username}" == "" ];    then echo "no NXF_username env var set; exiting"; exit 1; fi
 if [ "${github_repo}" == "" ]; then echo "no NXF_github_repo env var set; exiting"; exit 1; fi
 if [ "${static_path}" == "" ]; then echo "no static_path env var set; exiting"; exit 1; fi
-if [ "${out_path}" == "" ];    then echo "no out_path env var set; exiting"; exit 1; fi
+if [ "${out_file}" == "" ];    then echo "no out_file env var set; exiting"; exit 1; fi
 
 # AWS keys must also be set, broadly following nextflow.config
 if [ "${NXF_AWS_accessKey}" ] || [ "${NXF_AWS_secretKey}" ]; then 
@@ -447,29 +447,29 @@ username_sha=$(echo $username | shasum | cut -c1-16)
 # ----------------------------------------------------------------------------------------
 # Run code
 #
-initial_setup
+get_config
 
 if [ $arg == "create_vpc" ]; then
     create_vpc
-    get_vpc_info
+    get_cloud_info
 elif [ $arg == "setup_efs" ]; then
     setup_efs
-    get_vpc_info
+    get_cloud_info
 elif [ $arg == "setup_ecr" ]; then
     setup_ecr
-    get_vpc_info
+    get_cloud_info
 elif [ $arg == "shutdown_vpc" ]; then
-    get_vpc_info
+    get_cloud_info
     shutdown_nextflow_cluster
     shutdown_vpc
 elif [ $arg == "create_nextflow_cluster" ]; then
     create_nextflow_cluster
-    get_vpc_info
+    get_cloud_info
 elif [ $arg == "shutdown_nextflow_cluster" ]; then
-    get_vpc_info
+    get_cloud_info
     shutdown_nextflow_cluster
-elif [ $arg == "get_vpc_info" ]; then
-    get_vpc_info
+elif [ $arg == "get_cloud_info" ]; then
+    get_cloud_info
 elif [ $arg == "run_on_cloud" ]; then
     run_on_cloud
 else
