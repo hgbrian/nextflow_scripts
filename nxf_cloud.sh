@@ -254,12 +254,12 @@ setup_ecr() {
     ecrinfo=$(aws ecr describe-repositories --profile "${username}" | grep "^REPOSITORIES")
 
     if [ "${ecrinfo}" == "" ]; then
-        echo "No ECR ${reponame} found, creating one"
-        ecrinfo=$(aws ecr create-repository --repository-name "${reponame}" --profile "${username}")
+        echo "No ECR ${repo_name} found, creating one"
+        ecrinfo=$(aws ecr create-repository --repository-name "${repo_name}" --profile "${username}")
         ecr_url=$(echo "${ecrinfo}" | cut -f6)
     else
-        if [ $(echo "${ecrinfo}" | cut -f5) != "${reponame}" ]; then
-            echo "Error in repo name? $(echo ${ecrinfo} | cut -f5) should be ${reponame}"
+        if [ $(echo "${ecrinfo}" | cut -f5) != "${repo_name}" ]; then
+            echo "Error in repo name? $(echo ${ecrinfo} | cut -f5) should be ${repo_name}"
         fi
         ecr_url=$(echo "${ecrinfo}" | cut -f6)
     fi
@@ -282,7 +282,7 @@ create_nextflow_cluster() {
 
     nfcinfo=$(nextflow cloud list)
     if [ "$nfcinfo" == "No cluster available" ]; then
-        nextflow cloud create ${username}_cluster
+        nextflow cloud create ${cluster_name}
     else
         echo "Cluster already exists; exiting"
         exit
@@ -299,7 +299,7 @@ shutdown_nextflow_cluster() {
         echo "No cluster available; not shutting cluster down."
     else
         echo "first ssh in and unmount the efs drive"
-        #nextflow cloud shutdown ${username}_cluster
+        #nextflow cloud shutdown ${cluster_name}
     fi
 }
 
@@ -438,7 +438,8 @@ fi
 # ----------------------------------------------------------------------------------------
 # Some derived globals
 #
-reponame="${username}_repo"
+repo_name="${username}_repo"
+cluster_name="${username}_cluster"
 env_vars_file="env_vars.${username}.export"
 username_sha=$(echo $username | shasum | cut -c1-16)
 
