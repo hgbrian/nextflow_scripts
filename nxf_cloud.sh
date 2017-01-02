@@ -27,6 +27,9 @@ shutdown_vpc
 create_nextflow_cluster
 shutdown_nextflow_cluster"
 
+# FIXFIX where should this live
+db_name="tiny"
+
 
 # ----------------------------------------------------------------------------------------
 # initial setup
@@ -163,7 +166,6 @@ get_cloud_info() {
         subnetinfo=$(aws ec2 describe-subnets --output text --profile $username)
         subnet_id=$(echo "${subnetinfo}" | grep $vpc_id | cut -f9)
         echo "subnet_id:    ${subnet_id:-[None]}"
-        #echo "export NXF_AWS_subnet_id=${subnet_id}" >"${env_vars_file}"
 
         sginfo=$(aws ec2 describe-security-groups --output text --profile $username | grep $vpc_id)
         sg_id=$(echo "$sginfo" | cut -f3)
@@ -180,15 +182,16 @@ get_cloud_info() {
 
         efs_id=$(aws efs describe-file-systems --profile $username | grep "^FILESYSTEMS" | head -1 | cut -f4)
         echo "efs_id:       ${efs_id:-[None]}  [ if [None], set up with create_efs ]"
-        #echo "export NXF_AWS_efs_id=${efs_id}" >>"${env_vars_file}"
 
         ecr_url=$(aws ecr describe-repositories --profile $username | grep "^REPOSITORIES" | head -1 | cut -f6)
         echo "ecr_url:      ${ecr_url:-[None]} [ if [None], set up with setup_ecr ]"
-        #echo "export NXF_AWS_container=${ecr_url}" >>"${env_vars_file}"
         
-        echo "writing out nextflow.env_vars.config (executing in subshell)"
+        echo "[writing out to nextflow.env_vars.config]"
+        printf "NXF_username\nNXF_github_repo\nNXF_AWS_subnet_id\nNXF_AWS_efs_id\nNXF_AWS_efs_mnt\nNXF_container:${ecr_url}\n"
+        
         (export NXF_username="${username:-[None]}" NXF_github_repo="${github_repo:-[None]}" \
-        NXF_AWS_subnet_id="${subnet_id:-[None]}" NXF_AWS_efs_id="${efs_id:-[None]}" NXF_AWS_efs_mnt="${efs_mnt:-[None]}"; \
+        NXF_AWS_subnet_id="${subnet_id:-[None]}" NXF_AWS_efs_id="${efs_id:-[None]}" \
+        NXF_AWS_efs_mnt="${efs_mnt:-[None]}" NXF_container="${ecr_url:-[None]}"; \
         cat nextflow.config | \
         awk '{while(match($0,"[$]{[^}]*}")) {var=substr($0,RSTART+2,RLENGTH -3);gsub("[$]{"var"}",ENVIRON[var])}}1' \
         > nextflow.env_vars.config)
@@ -337,9 +340,9 @@ $(aws ecr get-login)
 echo "[docker pull]"
 docker pull "${ecr_url}"
 
-echo "=========================="
-echo "| Syncing files          |"
-echo "=========================="
+echo "============================="
+echo "| Syncing files             |"
+echo "============================="
 echo "[git pull]"
 if [ -d "\${NXF_ASSETS}/${github_repo}" ]; then
     cd "\${NXF_ASSETS}/${github_repo}"
@@ -347,10 +350,12 @@ if [ -d "\${NXF_ASSETS}/${github_repo}" ]; then
     cd -
 fi
 
+efs_static_path="${static_path}"
 if [ "${static_path::5}" == "s3://" ]; then
-    if [ ! -d "${efs_mnt}/${static_path:5}" ]; then
-        echo "aws s3 cp --recursive "${static_path}" "${efs_mnt}/${static_path:5}""
-        aws s3 cp --recursive "${static_path}" "${efs_mnt}/${static_path:5}"
+    efs_static_path="${efs_mnt}/${static_path:5}"
+    if [ ! -d "\${efs_static_path}" ]; then
+        echo "aws s3 cp --recursive "${static_path}" "\${efs_static_path}""
+        aws s3 cp --recursive "${static_path}" "${efs_static_path}"
     fi
 elif [ "${static_path}" == "" ]; then
     echo "no static path provided"
@@ -373,14 +378,16 @@ export NXF_AWS_secretKey="${AWS_secretKey}"
 export NXF_AWS_container="${ecr_url}"
 export NXF_AWS_efs_mnt="${efs_mnt}"
 
-echo "[envs set]"
+echo "[env vars set]"
 export |grep NXF
 
 echo "[nextflow run]"
-./nextflow run ${github_repo} -with-docker -profile aws -with-dag "${out_file}-dag.png" \
---db "${efs_mnt}/${static_path:5}/tiny" \
+./nextflow run ${github_repo} -with-docker -profile aws \
+-with-dag "${out_file}-dag.png" \
+--db "\${efs_static_path}/${db_name}" \
 --out "${out_file}"
 ENDSSH
+
 }
 
 
@@ -389,8 +396,10 @@ ENDSSH
 #
 
 usage() {
-    printf "Available functions:"
-    printf "\n${available_fns}\n"
+    printf "[Available functions]\n"
+    printf "${available_fns}\n"
+    printf "[Options]\n"
+    printf "  --username\n  --github_repo\n  --static_path\n  --out_file\n  --efs_mnt\n"
 }
 
 
