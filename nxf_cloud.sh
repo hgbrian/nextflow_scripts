@@ -358,7 +358,6 @@ else
     echo "[ERROR] only s3 static_paths supported (static_path: ${static_path})"
     exit 1
 fi
-echo "done wih s3"
 
 echo "============================="
 echo "| Running nextflow on cloud |"
@@ -374,9 +373,10 @@ export NXF_AWS_secretKey="${AWS_secretKey}"
 export NXF_AWS_container="${ecr_url}"
 export NXF_AWS_efs_mnt="${efs_mnt}"
 
-echo ["envs set"]
+echo "[envs set]"
 export |grep NXF
 
+echo "[nextflow run]"
 ./nextflow run ${github_repo} -with-docker -profile aws -with-dag "${out_file}-dag.png" \
 --db "${efs_mnt}/${static_path:5}/tiny" \
 --out "${out_file}"
