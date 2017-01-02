@@ -21,7 +21,7 @@ NXF_AWS_container
 NXF_AWS_accessKey
 NXF_AWS_secretKey"
 
-available_fns="describe_vpc
+available_fns="get_vpc_info
 create_vpc
 shutdown_vpc
 create_nextflow_cluster
@@ -51,10 +51,6 @@ initial_setup() {
     is_env_set="${is_env_set:1}"
     is_env_not="${is_env_not:1}"
 
-    #
-    # use username_sha where the raw username is not appropriate
-    #
-    username_sha=$(echo $username | shasum | cut -c1-16)
 
     #
     # Check if this user has been set up on AWS. If not the user must be set up.
@@ -153,7 +149,7 @@ create_vpc() {
     fi
 }
 
-describe_vpc() {
+get_vpc_info() {
     echo "================================"
     echo "| describe vpc / set up env    |"
     echo "================================"
@@ -167,7 +163,7 @@ describe_vpc() {
         subnetinfo=$(aws ec2 describe-subnets --output text --profile $username)
         subnet_id=$(echo "${subnetinfo}" | grep $vpc_id | cut -f9)
         echo "subnet_id:    ${subnet_id:-[None]}"
-        echo "export NXF_AWS_subnet_id=${subnet_id}" >"${env_vars_file}"
+        #echo "export NXF_AWS_subnet_id=${subnet_id}" >"${env_vars_file}"
 
         sginfo=$(aws ec2 describe-security-groups --output text --profile $username | grep $vpc_id)
         sg_id=$(echo "$sginfo" | cut -f3)
@@ -178,17 +174,23 @@ describe_vpc() {
 
         rtb_id=$(aws ec2 describe-route-tables --output text --profile $username | grep $vpc_id | cut -f2)
         echo "rtb_id:       ${rtb_id:-[None]}"
-    
+
         igw_id=$(aws ec2 describe-internet-gateways --profile $username |grep -B1 $vpc_id |head -1 | cut -f2)
         echo "igw_id:       ${igw_id:-[None]}"
 
         efs_id=$(aws efs describe-file-systems --profile $username | grep "^FILESYSTEMS" | head -1 | cut -f4)
         echo "efs_id:       ${efs_id:-[None]}"
-        echo "export NXF_AWS_efs_id=${efs_id}" >>"${env_vars_file}"
+        #echo "export NXF_AWS_efs_id=${efs_id}" >>"${env_vars_file}"
 
         ecr_url=$(aws ecr describe-repositories --profile $username | grep "^REPOSITORIES" | head -1 | cut -f6)
         echo "ecr_url:      ${ecr_url:-[None]}"
-        echo "export NXF_AWS_container=${ecr_url}" >>"${env_vars_file}"        
+        #echo "export NXF_AWS_container=${ecr_url}" >>"${env_vars_file}"
+        
+        #echo "writing out nextflow.nxf_cloud2.config"
+        cat nextflow.nxf_cloud.config.template | \
+        awk '{while(match($0,"[$]{[^}]*}")) {var=substr($0,RSTART+2,RLENGTH -3);gsub("[$]{"var"}",ENVIRON[var])}}1' \
+        > nextflow.nxf_cloud.config
+
     else
         echo "No vpc exists; exiting"
         exit
@@ -199,7 +201,7 @@ describe_vpc() {
 # ----------------------------------------------------------------------------------------
 # Shut down VPC, attempt to delete all traces from AWS
 # This can go wrong if the EFS is till mounted.
-# Variables in here come are initialized during describe_vpc
+# Variables in here come are initialized during get_vpc_info
 #
 shutdown_vpc() {
     echo "================================"
@@ -313,10 +315,11 @@ run_on_cloud() {
     aws_cloud_ip=$(aws ec2 describe-instances --profile $username | grep "^INSTANCES" | head -1 | cut -f13)
 
     ssh -i "/Users/briann/.ssh/ssh-key-${username}" "${username}@${aws_cloud_ip}" <<ENDSSH
-echo "=========================="
-echo "| Preparing for nextflow |"
-echo "=========================="
+echo "============================="
+echo "| Preparing to run nextflow |"
+echo "============================="
 
+# remove export
 export NXF_username="${NXF_username}"
 export NXF_github_repo="${NXF_github_repo}"
 export NXF_AWS_subnet_id="${NXF_AWS_subnet_id}"
@@ -328,9 +331,9 @@ export NXF_AWS_efs_mnt="${NXF_AWS_efs_mnt}"
 
 docker pull "${NXF_AWS_container}"
 
-# Why does this not work? Puzzling.
-docker_login_cmd=\$(aws ecr get-login)
-echo "Logging in to ECR using command: \$(echo \${docker_login_cmd} | perl -pe 's/-p (.+?) (.+)/-p pwd $2/g')"
+# Why does this version not work? Puzzling.
+#docker_login_cmd=\$(aws ecr get-login)
+#echo "Logging in to ECR using command: \$(echo \${docker_login_cmd} | perl -pe 's/-p (.+?) (.+)/-p pwd $2/g')"
 $(aws ecr get-login)
 
 echo "=========================="
@@ -351,9 +354,9 @@ else
     exit
 fi
 
-echo "=========================="
-echo "| Running nextflow       |"
-echo "=========================="
+echo "============================="
+echo "| Running nextflow on cloud |"
+echo "============================="
 ./nextflow run ${github_repo} -with-docker -profile aws -with-dag "${out_path}-dag.png" \
 --db "${NXF_AWS_efs_mnt}/pdb/tiny" \
 --out "${out_path}"
@@ -404,20 +407,20 @@ done
 
 # ----------------------------------------------------------------------------------------
 # Globals
-# All these environment variables will need to be set to run `nextflow cloud`
+# All these params/variables will need to be set to run `nextflow cloud`
 #
 
-if [ "${username}" == "" ] && [ "${NXF_username}" ]; then username="${NXF_username}"; fi
+if [ "${username}" == "" ] && [ "${NXF_username}" ];       then username="${NXF_username}"; fi
 if [ "${github_repo}" == "" ] && [ "${NXF_github_repo}" ]; then username="${NXF_github_repo}"; fi
 if [ "${static_path}" == "" ] && [ "${NXF_static_path}" ]; then static_path="${NXF_static_path}"; fi
-if [ "${out_path}" == "" ] && [ "${NXF_out_path}" ]; then out_path="${NXF_out_path}"; fi
+if [ "${out_path}" == "" ] && [ "${NXF_out_path}" ];       then out_path="${NXF_out_path}"; fi
 
-if [ "${username}" == "" ]; then echo "no NXF_username env var set; exiting"; exit 1; fi
+if [ "${username}" == "" ];    then echo "no NXF_username env var set; exiting"; exit 1; fi
 if [ "${github_repo}" == "" ]; then echo "no NXF_github_repo env var set; exiting"; exit 1; fi
 if [ "${static_path}" == "" ]; then echo "no static_path env var set; exiting"; exit 1; fi
-if [ "${out_path}" == "" ]; then echo "no out_path env var set; exiting"; exit 1; fi
+if [ "${out_path}" == "" ];    then echo "no out_path env var set; exiting"; exit 1; fi
 
-# AWS keys must also be set
+# AWS keys must also be set, broadly following nextflow.config
 if [ "${NXF_AWS_accessKey}" ] || [ "${NXF_AWS_secretKey}" ]; then 
     AWS_accessKey="${NXF_AWS_accessKey}"
     AWS_secretKey="${NXF_AWS_secretKey}"
@@ -437,6 +440,7 @@ fi
 #
 reponame="${username}_repo"
 env_vars_file="env_vars.${username}.export"
+username_sha=$(echo $username | shasum | cut -c1-16)
 
 
 # ----------------------------------------------------------------------------------------
@@ -444,28 +448,27 @@ env_vars_file="env_vars.${username}.export"
 #
 initial_setup
 
-
 if [ $arg == "create_vpc" ]; then
     create_vpc
-    describe_vpc
+    get_vpc_info
 elif [ $arg == "setup_efs" ]; then
     setup_efs
-    describe_vpc
+    get_vpc_info
 elif [ $arg == "setup_ecr" ]; then
     setup_ecr
-    describe_vpc
+    get_vpc_info
 elif [ $arg == "shutdown_vpc" ]; then
-    describe_vpc
+    get_vpc_info
     shutdown_nextflow_cluster
     shutdown_vpc
 elif [ $arg == "create_nextflow_cluster" ]; then
     create_nextflow_cluster
-    describe_vpc
+    get_vpc_info
 elif [ $arg == "shutdown_nextflow_cluster" ]; then
-    describe_vpc
+    get_vpc_info
     shutdown_nextflow_cluster
-elif [ $arg == "describe_vpc" ]; then
-    describe_vpc
+elif [ $arg == "get_vpc_info" ]; then
+    get_vpc_info
 elif [ $arg == "run_on_cloud" ]; then
     run_on_cloud
 else
