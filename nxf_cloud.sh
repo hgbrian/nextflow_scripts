@@ -170,7 +170,7 @@ get_cloud_info() {
         echo "sg_id:        ${sg_id:-[None]}"
 
         eni_id=$(aws ec2 describe-network-interfaces --output text --profile $username | grep $vpc_id | cut -f5)
-        echo "eni_id:       ${eni_id:-[None]}"
+        echo "eni_id:       ${eni_id:-[None]}   [ if [None] what? ]"
 
         rtb_id=$(aws ec2 describe-route-tables --output text --profile $username | grep $vpc_id | cut -f2)
         echo "rtb_id:       ${rtb_id:-[None]}"
@@ -179,17 +179,19 @@ get_cloud_info() {
         echo "igw_id:       ${igw_id:-[None]}"
 
         efs_id=$(aws efs describe-file-systems --profile $username | grep "^FILESYSTEMS" | head -1 | cut -f4)
-        echo "efs_id:       ${efs_id:-[None]}"
+        echo "efs_id:       ${efs_id:-[None]}  [ if [None], set up with create_efs ]"
         #echo "export NXF_AWS_efs_id=${efs_id}" >>"${env_vars_file}"
 
         ecr_url=$(aws ecr describe-repositories --profile $username | grep "^REPOSITORIES" | head -1 | cut -f6)
-        echo "ecr_url:      ${ecr_url:-[None]}"
+        echo "ecr_url:      ${ecr_url:-[None]} [ if [None], set up with setup_ecr ]"
         #echo "export NXF_AWS_container=${ecr_url}" >>"${env_vars_file}"
         
-        #echo "writing out nextflow.nxf_cloud2.config"
+        echo "writing out nextflow.env_vars.config (executing in subshell)"
+        (export NXF_username="${username:-[None]}" NXF_github_repo="${github_repo:-[None]}" \
+        NXF_AWS_subnet_id="${subnet_id:-[None]}" NXF_AWS_efs_id="${efs_id:-[None]}" NXF_AWS_efs_mnt="${efs_mnt:-[None]}"; \
         cat nextflow.config | \
         awk '{while(match($0,"[$]{[^}]*}")) {var=substr($0,RSTART+2,RLENGTH -3);gsub("[$]{"var"}",ENVIRON[var])}}1' \
-        > nextflow.env_vars.config
+        > nextflow.env_vars.config)
 
     else
         echo "No vpc exists; exiting"
@@ -221,7 +223,7 @@ shutdown_vpc() {
 # Set up an EFS on AWS and mount it.
 # EFS initially uses no space, and grows as you add files to it.
 #
-setup_efs() {
+create_efs() {
     echo "================================"
     echo "| setup efs                    |"
     echo "================================"
@@ -281,10 +283,14 @@ create_nextflow_cluster() {
     echo "================================"
 
     nfcinfo=$(nextflow cloud list)
-    if [ "$nfcinfo" == "No cluster available" ]; then
+    if [ "${nfcinfo}" == "No cluster available" ]; then
+
+        (export NXF_username="${username:-[None]}" NXF_github_repo="${github_repo:-[None]}" \
+        NXF_AWS_subnet_id="${subnet_id:-[None]}" NXF_AWS_efs_id="${efs_id:-[None]}" NXF_AWS_efs_mnt="${efs_mnt:-[None]}"; \
         nextflow cloud create ${cluster_name}
+        )
     else
-        echo "Cluster already exists; exiting"
+        echo "Cluster already exists? (${nfcinfo}); exiting"
         exit
     fi
 }
@@ -295,11 +301,14 @@ shutdown_nextflow_cluster() {
     echo "================================"
 
     nfcinfo=$(nextflow cloud list)
-    if [ "$nfcinfo" == "No cluster available" ]; then
+    if [ "${nfcinfo}" == "No cluster available" ]; then
         echo "No cluster available; not shutting cluster down."
     else
         echo "first ssh in and unmount the efs drive"
+        #(export NXF_username="${username:-[None]}" NXF_github_repo="${github_repo:-[None]}" \
+        #NXF_AWS_subnet_id="${subnet_id:-[None]}" NXF_AWS_efs_id="${efs_id:-[None]}" NXF_AWS_efs_mnt="${efs_mnt:-[None]}"; \
         #nextflow cloud shutdown ${cluster_name}
+        #)
     fi
 }
 
@@ -308,9 +317,9 @@ run_on_cloud() {
     echo "================================"
     echo "| run on cloud                 |"
     echo "================================"
-    echo "github_repo:          ${NXF_github_repo}"
+    echo "github_repo:          ${github_repo}"
     
-    if [ "${is_env_not}" != "" ]; then echo "missing environment vars: ${is_env_not}; exiting" exit; fi
+    #if [ "${is_env_not}" != "" ]; then echo "missing environment vars: ${is_env_not}; exiting" exit; fi
 
     aws_cloud_ip=$(aws ec2 describe-instances --profile $username | grep "^INSTANCES" | head -1 | cut -f13)
 
@@ -319,48 +328,57 @@ echo "============================="
 echo "| Preparing to run nextflow |"
 echo "============================="
 
-# remove export
-export NXF_username="${NXF_username}"
-export NXF_github_repo="${NXF_github_repo}"
-export NXF_AWS_subnet_id="${NXF_AWS_subnet_id}"
-export NXF_AWS_efs_id="${NXF_AWS_efs_id}"
-export NXF_AWS_accessKey="${NXF_AWS_accessKey}"
-export NXF_AWS_secretKey="${NXF_AWS_secretKey}"
-export NXF_AWS_container="${NXF_AWS_container}"
-export NXF_AWS_efs_mnt="${NXF_AWS_efs_mnt}"
-
-docker pull "${NXF_AWS_container}"
-
 # Why does this version not work? Puzzling.
 #docker_login_cmd=\$(aws ecr get-login)
 #echo "Logging in to ECR using command: \$(echo \${docker_login_cmd} | perl -pe 's/-p (.+?) (.+)/-p pwd $2/g')"
+echo "[aws ecr login]"
 $(aws ecr get-login)
+
+echo "[docker pull]"
+docker pull "${ecr_url}"
 
 echo "=========================="
 echo "| Syncing files          |"
 echo "=========================="
-if [ -d "\${NXF_ASSETS}/${NXF_github_repo}" ]; then
-    cd "\${NXF_ASSETS}/${NXF_github_repo}"
+echo "[git pull]"
+if [ -d "\${NXF_ASSETS}/${github_repo}" ]; then
+    cd "\${NXF_ASSETS}/${github_repo}"
     git pull
     cd -
 fi
 
 if [ "${static_path::5}" == "s3://" ]; then
-    if [ ! -d "${NXF_AWS_efs_mnt}/${static_path:5}" ]; then
-        aws s3 cp --recursive "${static_path}" "${NXF_AWS_efs_mnt}/${static_path:5}"
+    if [ ! -d "${efs_mnt}/${static_path:5}" ]; then
+        echo "aws s3 cp --recursive "${static_path}" "${efs_mnt}/${static_path:5}""
+        aws s3 cp --recursive "${static_path}" "${efs_mnt}/${static_path:5}"
     fi
 elif [ "${static_path}" == "" ]; then
     echo "no static path provided"
 else
-    echo "NotImplementedError: only s3 static_paths supported"
-    exit
+    echo "[ERROR] only s3 static_paths supported (static_path: ${static_path})"
+    exit 1
 fi
+echo "done wih s3"
 
 echo "============================="
 echo "| Running nextflow on cloud |"
 echo "============================="
+
+# exports to share information with nextflow.config
+export NXF_username="${username}"
+export NXF_github_repo="${github_repo}"
+export NXF_AWS_subnet_id="${subnet_id}"
+export NXF_AWS_efs_id="${efs_id}"
+export NXF_AWS_accessKey="${AWS_accessKey}"
+export NXF_AWS_secretKey="${AWS_secretKey}"
+export NXF_AWS_container="${ecr_url}"
+export NXF_AWS_efs_mnt="${efs_mnt}"
+
+echo ["envs set"]
+export |grep NXF
+
 ./nextflow run ${github_repo} -with-docker -profile aws -with-dag "${out_file}-dag.png" \
---db "${NXF_AWS_efs_mnt}/pdb/tiny" \
+--db "${efs_mnt}/${static_path:5}/tiny" \
 --out "${out_file}"
 ENDSSH
 }
@@ -400,6 +418,9 @@ while [ "$1" != "" ]; do
         -o | --out_file )       shift
                                 out_file=$1
                                 ;;
+        -m | --efs_mnt )        shift
+                                efs_mnt=$1
+                                ;;
         * )                     usage
                                 exit 1
     esac
@@ -413,24 +434,32 @@ done
 #
 
 if [ "${username}" == "" ] && [ "${NXF_username}" ];       then username="${NXF_username}"; fi
-if [ "${github_repo}" == "" ] && [ "${NXF_github_repo}" ]; then username="${NXF_github_repo}"; fi
+if [ "${github_repo}" == "" ] && [ "${NXF_github_repo}" ]; then github_repo="${NXF_github_repo}"; fi
 if [ "${static_path}" == "" ] && [ "${NXF_static_path}" ]; then static_path="${NXF_static_path}"; fi
 if [ "${out_file}" == "" ] && [ "${NXF_out_file}" ];       then out_file="${NXF_out_file}"; fi
+if [ "${efs_mnt}" == "" ] && [ "${NXF_AWS_efs_mnt}" ];     then efs_mnt="${NXF_AWS_efs_mnt}"; fi
 
-if [ "${username}" == "" ];    then echo "no NXF_username env var set; exiting"; exit 1; fi
-if [ "${github_repo}" == "" ]; then echo "no NXF_github_repo env var set; exiting"; exit 1; fi
+# Required params
+if [ "${username}" == "" ];    then echo "no username set; exiting"; exit 1; fi
+if [ "${github_repo}" == "" ]; then echo "no github_repo set; exiting"; exit 1; fi
 
+# Optional params
 if [ "${static_path}" == "" ]; then
-    echo "no static_path env var set; defaulting to no static path"
+    echo "[WARN] no static_path (environment var NXF_static_path) set; defaulting to no static path"
     static_path=""
 fi
 
 if [ "${out_file}" == "" ]; then
-    echo "no out_file env var set; defaulting to out.out"
+    echo "[WARN] no out_file set (environment var NXF_out_file) set; defaulting to 'out.out'"
     out_file="out.out"
 fi
 
-# AWS keys must also be set, broadly following nextflow.config
+if [ "${efs_mnt}" == "" ]; then
+    echo "[WARN] no efs_mnt set (environment var NXF_AWS_efs_mnt) set; defaulting to '/efs/mnt'"
+    efs_mnt="/efs/mnt"
+fi
+
+# AWS keys, broadly following nextflow.config
 if [ "${NXF_AWS_accessKey}" ] || [ "${NXF_AWS_secretKey}" ]; then 
     AWS_accessKey="${NXF_AWS_accessKey}"
     AWS_secretKey="${NXF_AWS_secretKey}"
@@ -453,7 +482,6 @@ cluster_name="${username}_cluster"
 env_vars_file="env_vars.${username}.export"
 username_sha=$(echo $username | shasum | cut -c1-16)
 
-
 # ----------------------------------------------------------------------------------------
 # Run code
 #
@@ -462,32 +490,29 @@ get_config
 if [ $arg == "create_vpc" ]; then
     create_vpc
     get_cloud_info
-elif [ $arg == "setup_efs" ]; then
-    setup_efs
+elif [ $arg == "create_efs" ]; then
+    create_efs
     get_cloud_info
 elif [ $arg == "setup_ecr" ]; then
     setup_ecr
-    get_cloud_info
 elif [ $arg == "shutdown_vpc" ]; then
     get_cloud_info
     shutdown_nextflow_cluster
     shutdown_vpc
 elif [ $arg == "create_nextflow_cluster" ]; then
-    create_nextflow_cluster
     get_cloud_info
+    create_nextflow_cluster
 elif [ $arg == "shutdown_nextflow_cluster" ]; then
     get_cloud_info
     shutdown_nextflow_cluster
 elif [ $arg == "get_cloud_info" ]; then
     get_cloud_info
 elif [ $arg == "run_on_cloud" ]; then
+    get_cloud_info
     run_on_cloud
 else
     printf "\n[No allowed arguments supplied]\n"
     usage
     exit 1
 fi
-
-
-
 
