@@ -187,9 +187,9 @@ get_vpc_info() {
         #echo "export NXF_AWS_container=${ecr_url}" >>"${env_vars_file}"
         
         #echo "writing out nextflow.nxf_cloud2.config"
-        cat nextflow.nxf_cloud.config.template | \
+        cat nextflow.nxf_cloud.config | \
         awk '{while(match($0,"[$]{[^}]*}")) {var=substr($0,RSTART+2,RLENGTH -3);gsub("[$]{"var"}",ENVIRON[var])}}1' \
-        > nextflow.nxf_cloud.config
+        > nextflow.nxf_cloud.with_env.config
 
     else
         echo "No vpc exists; exiting"
