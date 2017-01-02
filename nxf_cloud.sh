@@ -349,6 +349,8 @@ if [ "${static_path::5}" == "s3://" ]; then
     if [ ! -d "${NXF_AWS_efs_mnt}/${static_path:5}" ]; then
         aws s3 cp --recursive "${static_path}" "${NXF_AWS_efs_mnt}/${static_path:5}"
     fi
+elif [ "${static_path}" == "" ]; then
+    echo "no static path provided"
 else
     echo "NotImplementedError: only s3 static_paths supported"
     exit
@@ -417,8 +419,16 @@ if [ "${out_file}" == "" ] && [ "${NXF_out_file}" ];       then out_file="${NXF_
 
 if [ "${username}" == "" ];    then echo "no NXF_username env var set; exiting"; exit 1; fi
 if [ "${github_repo}" == "" ]; then echo "no NXF_github_repo env var set; exiting"; exit 1; fi
-if [ "${static_path}" == "" ]; then echo "no static_path env var set; exiting"; exit 1; fi
-if [ "${out_file}" == "" ];    then echo "no out_file env var set; exiting"; exit 1; fi
+
+if [ "${static_path}" == "" ]; then
+    echo "no static_path env var set; defaulting to no static path"
+    static_path=""
+fi
+
+if [ "${out_file}" == "" ]; then
+    echo "no out_file env var set; defaulting to out.out"
+    out_file="out.out"
+fi
 
 # AWS keys must also be set, broadly following nextflow.config
 if [ "${NXF_AWS_accessKey}" ] || [ "${NXF_AWS_secretKey}" ]; then 
