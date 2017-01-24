@@ -37,62 +37,63 @@ db_name="tiny"
 # Get information on whether a cluster exists/
 # Get external IP.
 #
-get_config() {
-    is_env_set=""
-    is_env_not=""
-    
-    for env_var in $required_env_vars
-    do
-        # http://unix.stackexchange.com/questions/251893/get-environment-variable-by-variable-name
-        if [ "${!env_var}" ]; then 
-            is_env_set="${is_env_set} ${env_var}"
-        else
-            is_env_not="${is_env_not} ${env_var}"
-        fi
-    done
-    # remove first space
-    is_env_set="${is_env_set:1}"
-    is_env_not="${is_env_not:1}"
 
 
-    #
-    # Check if this user has been set up on AWS. If not the user must be set up.
-    #
-    userinfo=$(aws iam get-user --user-name $username --profile $username)
-    userexists=$(echo "$userinfo" |cut -f6)
-
-    if [ "$userexists" != "$username" ]; then
-      echo "no such user: $username/$userexists"
-      echo "run 'aws configure --profile $username' to setup; exiting"
-      exit
-    fi
-
-    #
-    # Get my external ip address
-    #
-    external_ip=$(dig +short myip.opendns.com @resolver1.opendns.com)
-
-    #
-    # Check if a VPC and/or nextflow cloud exists already
-    #
-    vpcinfo=$(aws ec2 describe-vpcs --output text --profile "${username}")
-    vpc_id=$(echo "${vpcinfo}" |cut -f7)
-    if [ "$vpc_id" == '' ]; then vpc_id="No VPC available"; fi
-
-    clusterinfo=$(nextflow cloud list)
-    
-    echo "================================"
-    echo "| current config               |"
-    echo "================================"
-    echo "username:       ${username}"
-    echo "github_repo:    ${github_repo}"
-    echo "external_ip:    ${external_ip}"
-    echo "vpc:            ${vpc_id:-[None]}"
-    echo "cluster:       " ${clusterinfo} # remove newlines in output by removing quotes
-    echo "envs_are_set:   ${is_env_set:-[None]}"
-    echo "envs_not_set:   ${is_env_not:-[None]}"
-    echo "functions:     " ${available_fns}
-}
+# get_config() {
+#     is_env_set=""
+#     is_env_not=""
+#     
+#     for env_var in $required_env_vars
+#     do
+#         # http://unix.stackexchange.com/questions/251893/get-environment-variable-by-variable-name
+#         if [ "${!env_var}" ]; then 
+#             is_env_set="${is_env_set} ${env_var}"
+#         else
+#             is_env_not="${is_env_not} ${env_var}"
+#         fi
+#     done
+#     # remove first space
+#     is_env_set="${is_env_set:1}"
+#     is_env_not="${is_env_not:1}"
+# 
+# 
+#     #
+#     # Check if this user has been set up on AWS. If not the user must be set up.
+#     #
+#     userinfo=$(aws iam get-user --user-name $username --profile $username)
+#     userexists=$(echo "$userinfo" |cut -f6)
+# 
+#     if [ "$userexists" != "$username" ]; then
+#       echo "no such user: $username/$userexists"
+#       echo "run 'aws configure --profile $username' to setup; exiting"
+#       exit
+#     fi
+# 
+#     #
+#     # Get my external ip address
+#     #
+#     external_ip=$(dig +short myip.opendns.com @resolver1.opendns.com)
+# 
+#     #
+#     # Check if a VPC and/or nextflow cloud exists already
+#     #
+#     #vpcinfo=$(aws ec2 describe-vpcs --output text --profile "${username}")
+#     #vpc_id=$(echo "${vpcinfo}" |cut -f7)
+# 
+#     clusterinfo=$(nextflow cloud list)
+#     
+#     echo "================================"
+#     echo "| current config               |"
+#     echo "================================"
+#     echo "username:       ${username}"
+#     echo "github_repo:    ${github_repo}"
+#     echo "external_ip:    ${external_ip}"
+#     echo "vpc:            ${vpc_id:-[None]}"
+#     echo "cluster:       " ${clusterinfo} # remove newlines in output by removing quotes
+#     echo "envs_are_set:   ${is_env_set:-[None]}"
+#     echo "envs_not_set:   ${is_env_not:-[None]}"
+#     echo "functions:     " ${available_fns}
+# }
 
 
 # ----------------------------------------------------------------------------------------
@@ -157,6 +158,8 @@ get_cloud_info() {
     echo "| get cloud info               |"
     echo "================================"
 
+    external_ip=$(dig +short myip.opendns.com @resolver1.opendns.com)
+
     vpcinfo=$(aws ec2 describe-vpcs --output text --profile $username)
     vpc_id=$(echo "$vpcinfo" | cut -f7)
     
@@ -172,7 +175,7 @@ get_cloud_info() {
         echo "sg_id:        ${sg_id:-[None]}"
 
         eni_id=$(aws ec2 describe-network-interfaces --output text --profile $username | grep $vpc_id | cut -f5)
-        echo "eni_id:       ${eni_id:-[None]}   [ if [None] what? ]"
+        echo "eni_id:       ${eni_id:-[None]}"
 
         rtb_id=$(aws ec2 describe-route-tables --output text --profile $username | grep $vpc_id | cut -f2)
         echo "rtb_id:       ${rtb_id:-[None]}"
@@ -181,13 +184,13 @@ get_cloud_info() {
         echo "igw_id:       ${igw_id:-[None]}"
 
         efs_id=$(aws efs describe-file-systems --profile $username | grep "^FILESYSTEMS" | head -1 | cut -f4)
-        echo "efs_id:       ${efs_id:-[None]}  [ if [None], set up with create_efs ]"
+        echo "efs_id:       ${efs_id:-[None]}"
 
         ecr_url=$(aws ecr describe-repositories --profile $username | grep "^REPOSITORIES" | head -1 | cut -f6)
-        echo "ecr_url:      ${ecr_url:-[None]} [ if [None], set up with setup_ecr ]"
+        echo "ecr_url:      ${ecr_url:-[None]}"
         
-        echo "[writing out to nextflow.env_vars.config]"
-        printf "NXF_username\nNXF_github_repo\nNXF_AWS_subnet_id\nNXF_AWS_efs_id\nNXF_AWS_efs_mnt\nNXF_container:${ecr_url}\n"
+        printf "[writing out to nextflow.env_vars.config]\n"
+        printf "NXF_username\nNXF_github_repo\nNXF_AWS_subnet_id\nNXF_AWS_efs_id\nNXF_AWS_efs_mnt\nNXF_container\n"
         
         (export NXF_username="${username:-[None]}" NXF_github_repo="${github_repo:-[None]}" \
         NXF_AWS_subnet_id="${subnet_id:-[None]}" NXF_AWS_efs_id="${efs_id:-[None]}" \
@@ -244,7 +247,7 @@ create_efs() {
     echo "efs_id:         ${efs_id}"
 
     echo "[WARNING] Not mounting fs??? nextflow does it"
-    # I may not need to do this? (cut -f4 to get fsmt-id)
+    # I do not need to do this? (cut -f4 to get fsmt-id)
     #aws efs create-mount-target --file-system-id fs-6af50da3 --subnet-id subnet-9a4462ec --profile $username
 }
 
@@ -331,11 +334,10 @@ echo "============================="
 echo "| Preparing to run nextflow |"
 echo "============================="
 
-# Why does this version not work? Puzzling.
-#docker_login_cmd=\$(aws ecr get-login)
-#echo "Logging in to ECR using command: \$(echo \${docker_login_cmd} | perl -pe 's/-p (.+?) (.+)/-p pwd $2/g')"
-echo "[aws ecr login]"
-$(aws ecr get-login)
+echo "[docker login]"
+docker_login_cmd=\$(aws ecr get-login)
+echo "Logging in to ECR using command: \$( echo "\${docker_login_cmd}" | perl -pe 's/-p (.+?) (.+)/-p pwd $2/g')"
+\${docker_login_cmd}
 
 echo "[docker pull]"
 docker pull "${ecr_url}"
@@ -404,7 +406,7 @@ usage() {
 
 
 if [ $# -eq 0 ]; then
-    printf "\n[No arguments supplied]\n"
+    printf "[No arguments supplied]\n"
     usage
     exit 1
 fi
@@ -489,12 +491,11 @@ fi
 repo_name="${username}_repo"
 cluster_name="${username}_cluster"
 env_vars_file="env_vars.${username}.export"
-username_sha=$(echo $username | shasum | cut -c1-16)
+username_sha=$(echo "${username}" | shasum | cut -c1-16)
 
 # ----------------------------------------------------------------------------------------
 # Run code
 #
-get_config
 
 if [ $arg == "create_vpc" ]; then
     create_vpc
